@@ -1,6 +1,6 @@
 use maud::{html, Markup};
-use warp::Filter;
-use warp::reply::Html;
+use serde;
+use warp::{Filter, http::StatusCode, reply::Html};
 
 #[tokio::main]
 async fn main() {
@@ -11,12 +11,14 @@ async fn main() {
     // TODO: URL param for thread ID
     let thread = warp::path!("boards" / "main" / "threads" / "0").map(|| thread_route());
     let admin = warp::path("admin").map(|| "This is the admin view. Most people aren't going to have access to what lives in these routes, which shouldn't be a surprise.");
+    let healthz = warp::path("healthz").map(|| healthz_route());
 
     let all_routes = warp::get().and(
         hello
         .or(main)
         .or(thread)
-        .or(admin),
+        .or(admin)
+        .or(healthz),
     );
 
     warp::serve(all_routes)
@@ -26,6 +28,11 @@ async fn main() {
 
 // Keeping everything one file for now.
 // Routes begin below:
+fn healthz_route() -> impl warp::Reply {
+    let resp_body = Healthz{ok: true};
+    warp::reply::with_status(warp::reply::json(&resp_body), StatusCode::OK)
+}
+
 fn board_route(name: &str, description: &str) -> Html<String> {
     // TODO: check the board exists, query da db, etc.
     board_template(name, description)
@@ -69,6 +76,10 @@ fn post(post: &Post) -> Markup {
 // Renderers end above.
 
 // Types begin below:
+#[derive(serde::Serialize)]
+struct Healthz {
+    ok: bool,
+}
 struct Post {
     active: bool,
     body: String,
