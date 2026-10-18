@@ -80,23 +80,47 @@ fn post(post: &Post) -> Markup {
 struct Healthz {
     ok: bool,
 }
-struct Post {
+
+#[derive(sqlx::FromRow)]
+struct Board {
+    id: i64,
+    name: String,
+    slug: String,
+    description: String,
     active: bool,
-    body: String,
-    id: u64,
-    image: Option<u64>,
-    in_reply_to: Option<u64>,
-    thread_id: u64,
-    screen_name: Option<String>,
 }
 
+#[derive(sqlx::FromRow)]
 struct Thread {
+    id: i64,
+    board: i64,
+    created_at: i64,
+    bumped_at: i64,
     active: bool,
-    board: u64,
-    body: String,
-    id: u64,
-    image: Option<u64>,
+    image_id: Option<i64>,
     title: String,
+    body: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct Post {
+    id: i64,
+    thread_id: i64,
+    created_at: i64,
+    active: bool,
+    image_id: Option<i64>,
+    screen_name: Option<String>,
+    body: String,
+    in_reply_to: Option<i64>,
+}
+
+#[derive(sqlx::FromRow)]
+struct Image {
+    id: i64,
+    uri: String,
+    sha256: String,
+    mime_type: String,
+    original_name: Option<String>,
 }
 
 // Types end above.
@@ -105,31 +129,34 @@ struct Thread {
 fn posts() -> Vec<Post> {
     vec![
         Post{
-            active: true,
-            body: String::from("Tope!"),
             id: 1,
-            image: None,
-            in_reply_to: None,
             thread_id: 0,
-            screen_name: Some(String::from("Shane")),
-        },
-        Post{
+            created_at: 0,
             active: true,
-            body: String::from("Tup top nory."),
-            id: 2,
-            image: None,
-            in_reply_to: Some(1),
-            thread_id: 0,
-            screen_name: Some(String::from("Eric")),
+            image_id: None,
+            body: String::from("Tope!"),
+            screen_name: Some(String::from("Shane")),
+            in_reply_to: None,
         },
         Post{
-            active: false,
-            body: String::from("D'oh!"),
-            id: 3,
-            image: None,
-            in_reply_to: Some(1),
             thread_id: 0,
+            id: 2,
+            created_at: 1000,
+            active: true,
+            image_id: None,
+            screen_name: Some(String::from("Eric")),
+            body: String::from("Tup top nory."),
+            in_reply_to: Some(1),
+        },
+        Post{
+            id: 3,
+            thread_id: 0,
+            created_at: 20000,
+            active: false,
+            image_id: None,
             screen_name: Some(String::from("Stef")),
+            body: String::from("D'oh!"),
+            in_reply_to: Some(1),
         },
     ]
 }
@@ -137,11 +164,13 @@ fn posts() -> Vec<Post> {
 fn threads() -> Vec<Thread> {
     vec![
         Thread{
-            active: true,
-            board: 0,
-            body: String::from("This is my board now."),
             id: 0,
-            image: None,
+            board: 0,
+            created_at: 0,
+            bumped_at: 0,
+            active: true,
+            image_id: None,
+            body: String::from("This is my board now."),
             title: String::from("First thread ever?"),
         }
     ]
