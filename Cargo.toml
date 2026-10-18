@@ -2,9 +2,12 @@
 name = "bimage-boarb"
 version = "0.1.0"
 edition = "2024"
+default-run = "bimage-boarb"
 
 [dependencies]
+csv = "1"
 maud = "0.27.0"
-serde = { version = "1.0.229", features = ["derive"] }
-tokio = { version = "1", features = ["full"] }
-warp = { version = "0.4", features = ["server"] }
+serde = { version = "1.0.229", features = [ "derive" ] }
+sqlx = { version = "0.8.6", features = [ "runtime-tokio", "sqlite", "migrate" ] }
+tokio = { version = "1", features = [ "full" ] }
+warp = { version = "0.4", features = [ "server" ] }
