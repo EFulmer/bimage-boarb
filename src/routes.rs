@@ -50,7 +50,7 @@ pub async fn board(pool: SqlitePool, board_id: i64) -> Response {
     }
 }
 
-pub fn thread() -> Html<String> {
+pub fn thread(pool: SqlitePool, board_id: i64, thread_id: i64) -> Html<String> {
     // TODO: actual params, looking up the thread in da database, etc.
     let my_threads = threads();
     thread_template(&my_threads[0])
