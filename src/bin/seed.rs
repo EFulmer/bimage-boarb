@@ -10,6 +10,7 @@ struct BoardRow {
 
 #[derive(Deserialize)]
 struct ThreadRow {
+    id: i64,
     board_id: i64,
     created_at: i64,
     bumped_at: i64,
@@ -33,16 +34,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
     }
 
-    // threads has no natural unique key, so skip rows already seeded to keep reruns idempotent.
     let mut reader = csv::Reader::from_path("data/threads.csv")?;
 
     for row in reader.deserialize::<ThreadRow>() {
         let thread = row?;
         sqlx::query(
-            "insert into threads (board_id, created_at, bumped_at, title, body) \
-             select ?, ?, ?, ?, ? \
+            "insert or ignore into threads (id, board_id, created_at, bumped_at, title, body) \
+             select ?, ?, ?, ?, ?, ? \
              where not exists (select 1 from threads where board_id = ? and title = ?)",
         )
+        .bind(thread.id)
         .bind(thread.board_id)
         .bind(thread.created_at)
         .bind(thread.bumped_at)
