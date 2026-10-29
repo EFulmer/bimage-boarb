@@ -1,5 +1,5 @@
-board_id,created_at,bumped_at,title,body
-1,0,0,First thread!,Best thread ever?
-1,1,1,Second thread!,Worst thread ever?
-2,0,0,First art thread!,Best thread ever?
-2,1,1,Second art thread!,Best thread ever?
+id,board_id,created_at,bumped_at,title,body
+0,1,0,0,First thread!,Best thread ever?
+1,1,1,1,Second thread!,Worst thread ever?
+2,2,0,0,First art thread!,Best thread ever?
+3,2,1,1,Second art thread!,Best thread ever?
