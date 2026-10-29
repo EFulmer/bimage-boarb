@@ -8,6 +8,15 @@ struct BoardRow {
     description: String,
 }
 
+#[derive(Deserialize)]
+struct ThreadRow {
+    board_id: i64,
+    created_at: i64,
+    bumped_at: i64,
+    title: String,
+    body: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // TODO: parametrize
@@ -22,6 +31,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .bind(board.description)
             .execute(&pool)
             .await?;
+    }
+
+    // threads has no natural unique key, so skip rows already seeded to keep reruns idempotent.
+    let mut reader = csv::Reader::from_path("data/threads.csv")?;
+
+    for row in reader.deserialize::<ThreadRow>() {
+        let thread = row?;
+        sqlx::query(
+            "insert into threads (board_id, created_at, bumped_at, title, body) \
+             select ?, ?, ?, ?, ? \
+             where not exists (select 1 from threads where board_id = ? and title = ?)",
+        )
+        .bind(thread.board_id)
+        .bind(thread.created_at)
+        .bind(thread.bumped_at)
+        .bind(&thread.title)
+        .bind(thread.body)
+        .bind(thread.board_id)
+        .bind(&thread.title)
+        .execute(&pool)
+        .await?;
     }
 
     Ok(())
