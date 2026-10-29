@@ -10,6 +10,7 @@ struct BoardRow {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // TODO: parametrize
     let pool = SqlitePoolOptions::new().connect("sqlite:bimage.db").await?;
     let mut reader = csv::Reader::from_path("data/boards.csv")?;
 
