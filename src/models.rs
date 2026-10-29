@@ -18,7 +18,7 @@ pub struct Board {
 #[derive(sqlx::FromRow)]
 pub struct Thread {
     pub id: i64,
-    pub board: i64,
+    pub board_id: i64,
     pub created_at: i64,
     pub bumped_at: i64,
     pub active: bool,

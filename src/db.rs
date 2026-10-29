@@ -43,7 +43,7 @@ pub async fn threads_by_board(
     board_id: i64,
 ) -> Result<Vec<models::Thread>, sqlx::Error> {
     sqlx::query_as::<_, models::Thread>(
-        "select id, board, created_at, bumped_at, active, image_id, title, body from models::Threads where board_id = ? and active order by bumped_at desc;"
+        "select id, board_id, created_at, bumped_at, active, image_id, title, body from threads where board_id = ? and active order by bumped_at desc;"
     )
         .bind(board_id)
         .fetch_all(pool)

@@ -113,7 +113,7 @@ fn posts() -> Vec<models::Post> {
 fn threads() -> Vec<models::Thread> {
     vec![models::Thread {
         id: 0,
-        board: 0,
+        board_id: 0,
         created_at: 0,
         bumped_at: 0,
         active: true,
