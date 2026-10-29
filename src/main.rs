@@ -20,15 +20,22 @@ async fn main() {
     let boards = warp::path!("boards")
         .and(db::with_pool(pool.clone()))
         .then(routes::boards);
-    let board = warp::path!("boards" / i64)
-        .and(db::with_pool(pool.clone()))
-        .then(|pool, board_id| routes::board(board_id, pool));
-    // TODO: URL param for models::Thread ID
-    let thread = warp::path!("boards" / "main" / "models::Threads" / "0").map(|| routes::thread());
+    let board = db::with_pool(pool.clone())
+        .and(warp::path!("boards" / i64))
+        .then(routes::board);
+    // let thread = warp::path!("boards" / i64 / "threads" / i64)
+    //     .and(db::with_pool(pool.clone()))
+    //     .then(|pool, board_id, thread_id| routes::thread(pool, board_id, thread_id));
     let admin = warp::path("admin").map(|| "This is the admin view. Most people aren't going to have access to what lives in these routes, which shouldn't be a surprise.");
     let healthz = warp::path("healthz").map(|| routes::healthz());
 
-    let all_routes = warp::get().and(boards.or(board).or(thread).or(admin).or(healthz));
+    let all_routes = warp::get().and(
+        boards
+            .or(board)
+            // .or(thread)
+            .or(admin)
+            .or(healthz),
+    );
 
     warp::serve(all_routes).run(([127, 0, 0, 1], 3030)).await;
 }
