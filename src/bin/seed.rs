@@ -3,6 +3,7 @@ use sqlx::sqlite::SqlitePoolOptions;
 
 #[derive(Deserialize)]
 struct BoardRow {
+    id: i64,
     name: String,
     slug: String,
     description: String,
@@ -26,7 +27,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for row in reader.deserialize::<BoardRow>() {
         let board = row?;
-        sqlx::query("insert or ignore into boards (name, slug, description) values (?, ?, ?)")
+        sqlx::query("insert or ignore into boards (name, slug, description) values (?, ?, ?, ?)")
+            .bind(board.id)
             .bind(board.name)
             .bind(board.slug)
             .bind(board.description)
@@ -40,8 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let thread = row?;
         sqlx::query(
             "insert or ignore into threads (id, board_id, created_at, bumped_at, title, body) \
-             select ?, ?, ?, ?, ?, ? \
-             where not exists (select 1 from threads where board_id = ? and title = ?)",
+             values (?, ?, ?, ?, ?, ?)"
         )
         .bind(thread.id)
         .bind(thread.board_id)

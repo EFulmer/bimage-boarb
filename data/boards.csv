@@ -1,6 +1,6 @@
-name,slug,description
-main,main,Everything under the sun.
-art,art,"For all forms of art and media, movies, music, literature, video games, and visual art, may they long be peak and forever full of hope."
-memes,meme,Memes and James tweets.
-avatar,avatar,For Shane.
-creations,create,"For your own writing, music, etc."
+id,name,slug,description
+1,main,main,Everything under the sun.
+2,art,art,"For all forms of art and media, movies, music, literature, video games, and visual art, may they long be peak and forever full of hope."
+3,memes,meme,Memes and James tweets.
+4,avatar,avatar,For Shane.
+5,creations,create,"For your own writing, music, etc."
