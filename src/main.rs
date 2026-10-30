@@ -24,8 +24,8 @@ async fn main() {
     // let thread = warp::path!("boards" / i64 / "threads" / i64)
     //     .and(db::with_pool(pool.clone()))
     //     .then(|pool, board_id, thread_id| routes::thread(pool, board_id, thread_id));
-    let admin = warp::path("admin").map(|| "This is the admin view. Most people aren't going to have access to what lives in these routes, which shouldn't be a surprise.");
-    let healthz = warp::path("healthz").map(|| routes::healthz());
+    let admin = warp::path!("admin").map(|| "This is the admin view. Most people aren't going to have access to what lives in these routes, which shouldn't be a surprise.");
+    let healthz = warp::path!("healthz").map(routes::healthz);
 
     let all_routes = warp::get().and(
         boards

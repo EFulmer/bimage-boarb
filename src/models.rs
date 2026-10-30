@@ -1,6 +1,3 @@
-use serde;
-use sqlx;
-
 #[derive(serde::Serialize)]
 pub struct Healthz {
     pub ok: bool,
