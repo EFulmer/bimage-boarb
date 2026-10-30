@@ -1,14 +1,17 @@
-.PHONY: build run create_schema tools create-db migrate-db
+.PHONY: fmt build run create_schema tools create-db migrate-db seed-db
 
 # Dev installation:
 tools:
 	cargo install sqlx-cli --version '~0.8' --no-default-features --features sqlite
 
 # Rust application:
-build:
+build: fmt
 	cargo build
 
-run:
+fmt:
+	cargo fmt
+
+run: fmt
 	cargo run
 
 
