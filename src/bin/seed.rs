@@ -27,13 +27,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for row in reader.deserialize::<BoardRow>() {
         let board = row?;
-        sqlx::query("insert or ignore into boards (name, slug, description) values (?, ?, ?, ?)")
-            .bind(board.id)
-            .bind(board.name)
-            .bind(board.slug)
-            .bind(board.description)
-            .execute(&pool)
-            .await?;
+        sqlx::query(
+            "insert or ignore into boards (id, name, slug, description) values (?, ?, ?, ?)",
+        )
+        .bind(board.id)
+        .bind(board.name)
+        .bind(board.slug)
+        .bind(board.description)
+        .execute(&pool)
+        .await?;
     }
 
     let mut reader = csv::Reader::from_path("data/threads.csv")?;
@@ -42,16 +44,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let thread = row?;
         sqlx::query(
             "insert or ignore into threads (id, board_id, created_at, bumped_at, title, body) \
-             values (?, ?, ?, ?, ?, ?)"
+             values (?, ?, ?, ?, ?, ?)",
         )
         .bind(thread.id)
         .bind(thread.board_id)
         .bind(thread.created_at)
         .bind(thread.bumped_at)
-        .bind(&thread.title)
+        .bind(thread.title)
         .bind(thread.body)
-        .bind(thread.board_id)
-        .bind(&thread.title)
         .execute(&pool)
         .await?;
     }
