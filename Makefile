@@ -14,6 +14,8 @@ fmt:
 run: fmt
 	cargo run
 
+test: fmt
+	cargo test
 
 # Database:
 create-db:

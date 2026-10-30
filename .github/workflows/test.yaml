@@ -1,0 +1,16 @@
+name: Test
+run-name: Test suite, run by ${{ github.actor }} on ${{ github.ref_name }}
+on:
+  pull_request:
+    # Synchronize is when new activity happens on the branch; i.e. new commits pushed to the remote.
+    types: [opened, synchronize]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        BUILD_TARGET: [release]
+    steps:
+      - uses: actions/checkout@v6
+      - name: test
+        run: make test
