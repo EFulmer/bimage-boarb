@@ -64,7 +64,11 @@ fn error_page_with_response(status: StatusCode, heading: &str, message: &str) ->
     .into_response()
 }
 
-pub fn thread(pool: SqlitePool, board_id: i64, thread_id: i64) -> Html<String> {
+#[expect(
+    dead_code,
+    reason = "to be deleted and replaced with actual querying and rendering logic"
+)]
+pub fn thread(_pool: SqlitePool, _board_id: i64, _thread_id: i64) -> Html<String> {
     // TODO: actual params, looking up the thread in da database, etc.
     let my_threads = threads();
     thread_template(&my_threads[0])

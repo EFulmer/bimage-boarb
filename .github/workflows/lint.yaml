@@ -1,0 +1,18 @@
+name: Cargo Lints
+run-name: Cargo format and style checking, run by ${{ github.actor }} on ${{ github.ref_name }}.
+on:
+  pull_request:
+    # Synchronize is when new activity happens on the branch; i.e. new commits pushed to the remote.
+    types: [opened, synchronize]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        BUILD_TARGET: [release]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run `cargo fmt --check`
+        run: cargo fmt --check
+      - name: Run `cargo clippy` for additional linting
+        run: cargo clippy --all-targets -- --deny=warnings
