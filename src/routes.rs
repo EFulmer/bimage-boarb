@@ -2,7 +2,7 @@ use maud::{Markup, html};
 use sqlx::SqlitePool;
 use warp::{Reply, http::StatusCode, reply::Html, reply::Response};
 
-use crate::{db, models};
+use crate::{db, models, templates};
 
 pub fn healthz() -> impl warp::Reply {
     let resp_body = models::Healthz { ok: true };
@@ -12,11 +12,7 @@ pub fn healthz() -> impl warp::Reply {
 pub async fn boards(pool: SqlitePool) -> Response {
     match db::all_boards(&pool).await {
         Ok(boards) => {
-            let markup = html! {
-                h1 { "All Boards" }
-                @for board in boards { (render_board(&board)) }
-            };
-            warp::reply::html(markup.into_string()).into_response()
+            warp::reply::html(templates::boards_page(&boards).into_string()).into_response()
         }
         Err(e) => {
             eprintln!("all_boards failed: {e}");
@@ -34,14 +30,7 @@ pub async fn board(pool: SqlitePool, board_id: i64) -> Response {
             let threads = db::threads_by_board(&pool, board_id)
                 .await
                 .unwrap_or(Vec::new());
-            let markup = html! {
-                h1 { (board.name) }
-                h2 { (board.description) }
-                @for thread in threads {
-                    h3 { (thread.title) "-" (thread.created_at) }
-                }
-            };
-            warp::reply::html(markup.into_string()).into_response()
+            warp::reply::html(templates::board_page(&board, &threads).into_string()).into_response()
         }
         Err(e) => {
             eprintln!("board_by_id failed: {e}");
@@ -128,12 +117,4 @@ fn board_template(name: &str, description: &str) -> Html<String> {
         h1 { (name) " - " (description) }
     };
     warp::reply::html(markup.into_string())
-}
-
-fn render_board(board: &models::Board) -> Markup {
-    html! {
-        div.board id=(board.id) {
-            span.board { (board.name) "-" (board.description) }
-        }
-    }
 }

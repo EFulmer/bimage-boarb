@@ -4,6 +4,7 @@ use warp::Filter;
 mod db;
 mod models;
 mod routes;
+mod templates;
 
 #[tokio::main]
 async fn main() {
