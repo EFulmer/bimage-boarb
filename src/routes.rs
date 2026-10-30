@@ -136,10 +136,3 @@ fn threads() -> Vec<models::Thread> {
         title: String::from("First thread ever?"),
     }]
 }
-
-fn board_template(name: &str, description: &str) -> Html<String> {
-    let markup = html! {
-        h1 { (name) " - " (description) }
-    };
-    warp::reply::html(markup.into_string())
-}
