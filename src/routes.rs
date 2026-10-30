@@ -1,5 +1,5 @@
 use maud::{Markup, html};
-use sqlx::SqlitePool;
+use sqlx::{Error, SqlitePool};
 use warp::{Reply, http::StatusCode, reply::Html, reply::Response};
 
 use crate::{db, models, templates};
@@ -16,8 +16,7 @@ pub async fn boards(pool: SqlitePool) -> Response {
         }
         Err(e) => {
             eprintln!("all_boards failed: {e}");
-            warp::reply::with_status("Internal server error", StatusCode::INTERNAL_SERVER_ERROR)
-                .into_response()
+            internal_server_error_page()
         }
     }
 }
@@ -25,18 +24,45 @@ pub async fn boards(pool: SqlitePool) -> Response {
 pub async fn board(pool: SqlitePool, board_id: i64) -> Response {
     // TODO need to handle an inactive board.
     match db::board_by_id(&pool, board_id).await {
-        Ok(board) => {
-            // TODO need to handle when there ain't no threads
-            let threads = db::threads_by_board(&pool, board_id)
-                .await
-                .unwrap_or(Vec::new());
-            warp::reply::html(templates::board_page(&board, &threads).into_string()).into_response()
+        Ok(board) => match db::threads_by_board(&pool, board_id).await {
+            Ok(threads) => warp::reply::html(templates::board_page(&board, &threads).into_string())
+                .into_response(),
+            Err(e) => {
+                eprintln!("error when querying database for threads on board {board_id}: {e}");
+                internal_server_error_page()
+            }
+        },
+        Err(Error::RowNotFound) => {
+            eprintln!("board not found: {board_id}");
+            error_page_with_response(
+                StatusCode::NOT_FOUND,
+                &format!("Board {board_id} not found!"),
+                &format!(
+                    "The board {board_id} doesn't exist. Maybe it was misspelled, moved, or hasn't been created yet?"
+                ),
+            )
         }
         Err(e) => {
             eprintln!("board_by_id failed: {e}");
-            warp::reply::with_status("Not Found", StatusCode::NOT_FOUND).into_response()
+            internal_server_error_page()
         }
     }
+}
+
+fn internal_server_error_page() -> Response {
+    error_page_with_response(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "Internal server error.",
+        "The board is having issues. The specifics have been logged for an admin to fix.",
+    )
+}
+
+fn error_page_with_response(status: StatusCode, heading: &str, message: &str) -> Response {
+    warp::reply::with_status(
+        warp::reply::html(templates::error_page(status.as_u16(), heading, message).into_string()),
+        status,
+    )
+    .into_response()
 }
 
 pub fn thread(pool: SqlitePool, board_id: i64, thread_id: i64) -> Html<String> {
