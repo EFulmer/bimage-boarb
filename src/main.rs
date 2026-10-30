@@ -1,17 +1,14 @@
-use sqlx::sqlite::SqlitePoolOptions;
 use warp::Filter;
 
 mod db;
 mod models;
+mod queries;
 mod routes;
 mod templates;
 
 #[tokio::main]
 async fn main() {
-    let pool = SqlitePoolOptions::new()
-        .connect("sqlite:bimage.db?mode=rwc")
-        .await
-        .expect("failed to open database");
+    let pool = db::make_pool().await;
 
     sqlx::migrate!()
         .run(&pool)

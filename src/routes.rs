@@ -2,7 +2,7 @@ use maud::{Markup, html};
 use sqlx::{Error, SqlitePool};
 use warp::{Reply, http::StatusCode, reply::Html, reply::Response};
 
-use crate::{db, models, templates};
+use crate::{models, queries, templates};
 
 pub fn healthz() -> impl warp::Reply {
     let resp_body = models::Healthz { ok: true };
@@ -10,7 +10,7 @@ pub fn healthz() -> impl warp::Reply {
 }
 
 pub async fn boards(pool: SqlitePool) -> Response {
-    match db::all_boards(&pool).await {
+    match queries::all_boards(&pool).await {
         Ok(boards) => {
             warp::reply::html(templates::boards_page(&boards).into_string()).into_response()
         }
@@ -22,9 +22,8 @@ pub async fn boards(pool: SqlitePool) -> Response {
 }
 
 pub async fn board(pool: SqlitePool, board_id: i64) -> Response {
-    // TODO need to handle an inactive board.
-    match db::board_by_id(&pool, board_id).await {
-        Ok(board) => match db::threads_by_board(&pool, board_id).await {
+    match queries::board_by_id(&pool, board_id).await {
+        Ok(board) => match queries::threads_by_board(&pool, board_id).await {
             Ok(threads) => warp::reply::html(templates::board_page(&board, &threads).into_string())
                 .into_response(),
             Err(e) => {
