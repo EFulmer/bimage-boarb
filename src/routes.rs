@@ -55,13 +55,13 @@ pub async fn thread(pool: SqlitePool, board_slug: String, thread_id: i64) -> Res
                 eprintln!("board not found: {board_slug}");
                 not_found_page(
                     "Thread",
-                    "",
-                    "This thread is unavailable...\
+                    &thread_id.to_string(),
+                    "This thread is unavailable... \
                         or maybe it was never available in the first place? Much to think about.",
                 )
             }
             Err(e) => {
-                eprintln!("board_by_slug failed: {e}");
+                eprintln!("thread_by_id failed: {e}");
                 internal_server_error_page()
             }
         },
