@@ -6,6 +6,11 @@ use crate::models;
 
 // Inlined into every page so serving it doesn't need its own route.
 const STYLESHEET: &str = include_str!("../static/style.css");
+// Inline so browsers don't request /favicon.ico. `#` must be escaped as %23 inside a data URI.
+const FAVICON: &str = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>\
+<rect width='32' height='32' rx='7' fill='%23b5400c'/>\
+<text x='14' y='24' text-anchor='middle' font-family='Georgia,serif' font-weight='700' font-size='22' fill='%23fffcf5'>b</text>\
+<circle cx='25' cy='21' r='2.5' fill='%23fffcf5'/></svg>";
 const DEFAULT_SCREEN_NAME: &str = "Zorro";
 const EXCERPT_CHARS: usize = 280;
 
@@ -17,6 +22,7 @@ pub fn layout(title: &str, body: Markup) -> Markup {
                 meta charset="utf-8";
                 meta name="viewport" content="width=device-width, initial-scale=1";
                 title { (title) " · bimage-boarb" }
+                link rel="icon" type="image/svg+xml" href=(FAVICON);
                 style { (PreEscaped(STYLESHEET)) }
             }
             body {
