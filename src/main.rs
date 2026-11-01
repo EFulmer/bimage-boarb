@@ -24,13 +24,17 @@ async fn main() {
     let bare_board = db::with_pool(pool.clone())
         .and(warp::path!(String))
         .then(routes::board);
-    // let thread = warp::path!("boards" / i64 / "threads" / i64)
-    //     .and(db::with_pool(pool.clone()))
-    //     .then(|pool, board_id, thread_id| routes::thread(pool, board_id, thread_id));
+    let thread = db::with_pool(pool.clone())
+        .and(warp::path!(String / "threads" / i64))
+        .then(routes::thread);
 
     let all_routes = warp::get().and(
-        favicon.or(main_page).or(admin).or(healthz).or(bare_board),
-        // .or(thread)
+        favicon
+            .or(main_page)
+            .or(admin)
+            .or(healthz)
+            .or(bare_board)
+            .or(thread),
     );
 
     warp::serve(all_routes).run(([127, 0, 0, 1], 3030)).await;

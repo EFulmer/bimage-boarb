@@ -34,3 +34,18 @@ pub async fn threads_by_board(
     .fetch_all(pool)
     .await
 }
+
+pub async fn thread_by_id(
+    pool: &SqlitePool,
+    board_id: i64,
+    thread_id: i64,
+) -> Result<models::Thread, sqlx::Error> {
+    sqlx::query_as::<_, models::Thread>(
+        "select id, board_id, created_at, bumped_at, active, image_id, title, body \
+        from threads where id = ? and board_id = ? and active = 1 limit 1;",
+    )
+    .bind(thread_id)
+    .bind(board_id)
+    .fetch_one(pool)
+    .await
+}

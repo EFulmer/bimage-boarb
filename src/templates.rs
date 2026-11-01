@@ -97,7 +97,6 @@ pub fn board_page(board: &models::Board, threads: &[models::Thread]) -> Markup {
     )
 }
 
-#[expect(dead_code, reason = "we'll be wiring this up in Phase 2")]
 pub fn thread_page(
     board: &models::Board,
     thread: &models::Thread,
