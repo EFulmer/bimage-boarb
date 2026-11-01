@@ -1,6 +1,5 @@
-use maud::{Markup, html};
 use sqlx::{Error, SqlitePool};
-use warp::{Reply, http::StatusCode, reply::Html, reply::Response};
+use warp::{Reply, http::StatusCode, reply::Response};
 
 use crate::{models, queries, templates};
 
@@ -33,13 +32,7 @@ pub async fn board(pool: SqlitePool, board_slug: String) -> Response {
         },
         Err(Error::RowNotFound) => {
             eprintln!("board not found: {board_slug}");
-            error_page_with_response(
-                StatusCode::NOT_FOUND,
-                &format!("Board {board_slug} not found!"),
-                &format!(
-                    "The board {board_slug} doesn't exist. Maybe it was misspelled, moved, or hasn't been created yet?"
-                ),
-            )
+            board_not_found(&board_slug)
         }
         Err(e) => {
             eprintln!("board_by_slug failed: {e}");
@@ -48,47 +41,37 @@ pub async fn board(pool: SqlitePool, board_slug: String) -> Response {
     }
 }
 
-fn internal_server_error_page() -> Response {
-    error_page_with_response(
-        StatusCode::INTERNAL_SERVER_ERROR,
-        "Internal server error.",
-        "The board is having issues. The specifics have been logged for an admin to fix.",
-    )
-}
-
-fn error_page_with_response(status: StatusCode, heading: &str, message: &str) -> Response {
-    warp::reply::with_status(
-        warp::reply::html(templates::error_page(status.as_u16(), heading, message).into_string()),
-        status,
-    )
-    .into_response()
-}
-
-#[expect(
-    dead_code,
-    reason = "to be deleted and replaced with actual querying and rendering logic"
-)]
-pub fn thread(_pool: SqlitePool, _board_id: i64, _thread_id: i64) -> Html<String> {
+pub async fn thread(pool: SqlitePool, board_slug: String, thread_id: i64) -> Response {
     // TODO: actual params, looking up the thread in da database, etc.
-    let my_threads = threads();
-    thread_template(&my_threads[0])
-}
-
-fn thread_template(thread: &models::Thread) -> Html<String> {
-    // Obviously this `let` immediately below is to populate with some fake data to test rendering.
-    let my_posts = posts();
-    let markup = html! {
-        h2 { (thread.title) }
-        @for p in my_posts { (post(&p)) }
-    };
-    warp::reply::html(markup.into_string())
-}
-
-fn post(post: &models::Post) -> Markup {
-    html! {
-        div.post id=(post.id) {
-            span.screen_name { (post.screen_name.clone().unwrap_or("Zorro".to_string())) }
-            (post.body)
+    match queries::board_by_slug(&pool, &board_slug).await {
+        Ok(board) => match queries::thread_by_id(&pool, board.id, thread_id).await {
+            Ok(thread) => {
+                println!("still a WIP lol");
+                let my_posts = posts();
+                warp::reply::html(templates::thread_page(&board, &thread, &my_posts).into_string())
+                    .into_response()
+            }
+            Err(Error::RowNotFound) => {
+                eprintln!("board not found: {board_slug}");
+                not_found_page(
+                    "Thread",
+                    "",
+                    "This thread is unavailable...\
+                        or maybe it was never available in the first place? Much to think about.",
+                )
+            }
+            Err(e) => {
+                eprintln!("board_by_slug failed: {e}");
+                internal_server_error_page()
+            }
+        },
+        Err(Error::RowNotFound) => {
+            eprintln!("board not found: {board_slug}");
+            board_not_found(&board_slug)
+        }
+        Err(e) => {
+            eprintln!("board_by_slug failed: {e}");
+            internal_server_error_page()
         }
     }
 }
@@ -128,15 +111,37 @@ fn posts() -> Vec<models::Post> {
     ]
 }
 
-fn threads() -> Vec<models::Thread> {
-    vec![models::Thread {
-        id: 0,
-        board_id: 0,
-        created_at: 0,
-        bumped_at: 0,
-        active: true,
-        image_id: None,
-        body: String::from("This is my board now."),
-        title: String::from("First thread ever?"),
-    }]
+fn internal_server_error_page() -> Response {
+    error_page_with_response(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "Internal server error.",
+        "The board is having issues. The specifics have been logged for an admin to fix.",
+    )
+}
+
+fn board_not_found(board_name: &str) -> Response {
+    not_found_page(
+        "Board",
+        board_name,
+        &format!(
+            "The board {board_name} doesn't exist. \
+            Maybe it was misspelled, renamed, or hasn't been created yet?"
+        ),
+    )
+}
+
+fn not_found_page(item_type: &str, item_name: &str, message: &str) -> Response {
+    error_page_with_response(
+        StatusCode::NOT_FOUND,
+        &format!("{item_type} {item_name} not found!"),
+        message,
+    )
+}
+
+fn error_page_with_response(status: StatusCode, heading: &str, message: &str) -> Response {
+    warp::reply::with_status(
+        warp::reply::html(templates::error_page(status.as_u16(), heading, message).into_string()),
+        status,
+    )
+    .into_response()
 }
