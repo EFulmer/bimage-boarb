@@ -29,15 +29,15 @@ pub fn layout(title: &str, body: Markup) -> Markup {
                 a.skip-link href="#main" { "Skip to content" }
                 header.site-header {
                     div.wrap {
-                        a.wordmark href="/boards" { "bimage" span.dot { "·" } "boarb" }
+                        a.wordmark href="/" { "bimage" span.dot { "·" } "boarb" }
                         nav aria-label="Site" {
-                            a href="/boards" { "Boards" }
+                            a href="/" { "Boards" }
                         }
                     }
                 }
                 main #main .wrap { (body) }
                 footer.site-footer {
-                    div.wrap { "Made by friends, for friends." }
+                    div.wrap { "Have a nice day! ☺️" }
                 }
             }
         }
@@ -107,7 +107,7 @@ pub fn thread_page(
         &thread.title,
         html! {
             nav.breadcrumbs aria-label="Breadcrumb" {
-                a href="/boards" { "Boards" }
+                a href="/" { "Boards" }
                 " / "
                 a href={ "/" (board.slug) } { "/" (board.slug) "/" }
             }
@@ -135,7 +135,7 @@ pub fn error_page(status: u16, heading: &str, message: &str) -> Markup {
                 p.error-status { (status) }
                 h1.page-title { (heading) }
                 p { (message) }
-                p { a href="/boards" { "Back to the boards" } }
+                p { a href="/" { "Back to the boards" } }
             }
         },
     )

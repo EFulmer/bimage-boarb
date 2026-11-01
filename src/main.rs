@@ -18,7 +18,7 @@ async fn main() {
     let favicon = warp::path!("favicon.ico").map(|| warp::http::StatusCode::NO_CONTENT);
     let admin = warp::path!("admin").map(|| "This is the admin view. Most people aren't going to have access to what lives in these routes, which shouldn't be a surprise.");
     let healthz = warp::path!("healthz").map(routes::healthz);
-    let boards = warp::path!("boards")
+    let main_page = warp::path::end()
         .and(db::with_pool(pool.clone()))
         .then(routes::boards);
     let bare_board = db::with_pool(pool.clone())
@@ -29,7 +29,7 @@ async fn main() {
     //     .then(|pool, board_id, thread_id| routes::thread(pool, board_id, thread_id));
 
     let all_routes = warp::get().and(
-        favicon.or(boards).or(admin).or(healthz).or(bare_board),
+        favicon.or(main_page).or(admin).or(healthz).or(bare_board),
         // .or(thread)
     );
 
