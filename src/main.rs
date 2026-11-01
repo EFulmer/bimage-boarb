@@ -15,24 +15,24 @@ async fn main() {
         .await
         .expect("failed to run migration");
 
+    let favicon = warp::path!("favicon.ico")
+        .map(warp::reply)
+        .map(|reply| warp::reply::with_status(reply, warp::http::StatusCode::NO_CONTENT));
+    let admin = warp::path!("admin").map(|| "This is the admin view. Most people aren't going to have access to what lives in these routes, which shouldn't be a surprise.");
+    let healthz = warp::path!("healthz").map(routes::healthz);
     let boards = warp::path!("boards")
         .and(db::with_pool(pool.clone()))
         .then(routes::boards);
-    let board = db::with_pool(pool.clone())
-        .and(warp::path!("boards" / i64))
+    let bare_board = db::with_pool(pool.clone())
+        .and(warp::path!(String))
         .then(routes::board);
     // let thread = warp::path!("boards" / i64 / "threads" / i64)
     //     .and(db::with_pool(pool.clone()))
     //     .then(|pool, board_id, thread_id| routes::thread(pool, board_id, thread_id));
-    let admin = warp::path!("admin").map(|| "This is the admin view. Most people aren't going to have access to what lives in these routes, which shouldn't be a surprise.");
-    let healthz = warp::path!("healthz").map(routes::healthz);
 
     let all_routes = warp::get().and(
-        boards
-            .or(board)
-            // .or(thread)
-            .or(admin)
-            .or(healthz),
+        favicon.or(boards).or(admin).or(healthz).or(bare_board),
+        // .or(thread)
     );
 
     warp::serve(all_routes).run(([127, 0, 0, 1], 3030)).await;

@@ -21,28 +21,28 @@ pub async fn boards(pool: SqlitePool) -> Response {
     }
 }
 
-pub async fn board(pool: SqlitePool, board_id: i64) -> Response {
-    match queries::board_by_id(&pool, board_id).await {
-        Ok(board) => match queries::threads_by_board(&pool, board_id).await {
+pub async fn board(pool: SqlitePool, board_slug: String) -> Response {
+    match queries::board_by_slug(&pool, &board_slug).await {
+        Ok(board) => match queries::threads_by_board(&pool, board.id).await {
             Ok(threads) => warp::reply::html(templates::board_page(&board, &threads).into_string())
                 .into_response(),
             Err(e) => {
-                eprintln!("error when querying database for threads on board {board_id}: {e}");
+                eprintln!("error when querying database for threads on board {board_slug}: {e}");
                 internal_server_error_page()
             }
         },
         Err(Error::RowNotFound) => {
-            eprintln!("board not found: {board_id}");
+            eprintln!("board not found: {board_slug}");
             error_page_with_response(
                 StatusCode::NOT_FOUND,
-                &format!("Board {board_id} not found!"),
+                &format!("Board {board_slug} not found!"),
                 &format!(
-                    "The board {board_id} doesn't exist. Maybe it was misspelled, moved, or hasn't been created yet?"
+                    "The board {board_slug} doesn't exist. Maybe it was misspelled, moved, or hasn't been created yet?"
                 ),
             )
         }
         Err(e) => {
-            eprintln!("board_by_id failed: {e}");
+            eprintln!("board_by_slug failed: {e}");
             internal_server_error_page()
         }
     }

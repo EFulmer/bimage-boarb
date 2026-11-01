@@ -49,7 +49,7 @@ pub fn boards_page(boards: &[models::Board]) -> Markup {
                 ul.board-grid {
                     @for board in boards {
                         li {
-                            a.board-card href={ "/boards/" (board.id) } {
+                            a.board-card href={ "/" (board.slug) } {
                                 span.slug { "/" (board.slug) "/" }
                                 span.board-name { (board.name) }
                                 span.board-description { (board.description) }
@@ -75,7 +75,7 @@ pub fn board_page(board: &models::Board, threads: &[models::Thread]) -> Markup {
                         li {
                             article.thread-summary {
                                 h2 {
-                                    a href={ "/boards/" (board.id) "/threads/" (thread.id) } { (thread.title) }
+                                    a href={ "/" (board.slug) "/threads/" (thread.id) } { (thread.title) }
                                 }
                                 p.meta {
                                     "Started " (timestamp(thread.created_at))
@@ -103,7 +103,7 @@ pub fn thread_page(
             nav.breadcrumbs aria-label="Breadcrumb" {
                 a href="/boards" { "Boards" }
                 " / "
-                a href={ "/boards/" (board.id) } { "/" (board.slug) "/" }
+                a href={ "/" (board.slug) } { "/" (board.slug) "/" }
             }
             article.thread {
                 header.op {
@@ -138,7 +138,7 @@ pub fn error_page(status: u16, heading: &str, message: &str) -> Markup {
 fn board_header(board: &models::Board) -> Markup {
     html! {
         header.board-header {
-            p.slug { a href={ "/boards/" (board.id) } { "/" (board.slug) "/" } }
+            p.slug { a href={ "/" (board.slug) } { "/" (board.slug) "/" } }
             h1.page-title { (board.name) }
             p.board-description { (board.description) }
         }

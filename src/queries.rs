@@ -10,11 +10,14 @@ pub async fn all_boards(pool: &SqlitePool) -> Result<Vec<models::Board>, sqlx::E
     .await
 }
 
-pub async fn board_by_id(pool: &SqlitePool, board_id: i64) -> Result<models::Board, sqlx::Error> {
+pub async fn board_by_slug(
+    pool: &SqlitePool,
+    board_slug: &str,
+) -> Result<models::Board, sqlx::Error> {
     sqlx::query_as::<_, models::Board>(
-        "select id, name, slug, description, active from boards where id = ? and active = 1;",
+        "select id, name, slug, description, active from boards where slug = ? and active = 1;",
     )
-    .bind(board_id)
+    .bind(board_slug)
     .fetch_one(pool)
     .await
 }
