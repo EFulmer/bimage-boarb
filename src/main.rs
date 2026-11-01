@@ -15,9 +15,7 @@ async fn main() {
         .await
         .expect("failed to run migration");
 
-    let favicon = warp::path!("favicon.ico")
-        .map(warp::reply)
-        .map(|reply| warp::reply::with_status(reply, warp::http::StatusCode::NO_CONTENT));
+    let favicon = warp::path!("favicon.ico").map(|| warp::http::StatusCode::NO_CONTENT);
     let admin = warp::path!("admin").map(|| "This is the admin view. Most people aren't going to have access to what lives in these routes, which shouldn't be a surprise.");
     let healthz = warp::path!("healthz").map(routes::healthz);
     let boards = warp::path!("boards")
