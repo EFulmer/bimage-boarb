@@ -19,6 +19,16 @@ struct ThreadRow {
     body: String,
 }
 
+#[derive(Deserialize)]
+struct PostRow {
+    id: i64,
+    thread_id: i64,
+    created_at: i64,
+    body: String,
+    screen_name: String,
+    in_reply_to: Option<i64>,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // TODO: parametrize
@@ -52,6 +62,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .bind(thread.bumped_at)
         .bind(thread.title)
         .bind(thread.body)
+        .execute(&pool)
+        .await?;
+    }
+
+    let mut reader = csv::Reader::from_path("data/posts.csv")?;
+
+    for row in reader.deserialize::<PostRow>() {
+        let post = row?;
+        sqlx::query(
+            "insert or ignore into posts (id, thread_id, created_at, body, screen_name, in_reply_to) \
+            values (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(post.id)
+        .bind(post.thread_id)
+        .bind(post.created_at)
+        .bind(post.body)
+        .bind(post.screen_name)
+        .bind(post.in_reply_to)
         .execute(&pool)
         .await?;
     }
