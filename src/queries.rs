@@ -49,3 +49,17 @@ pub async fn thread_by_id(
     .fetch_one(pool)
     .await
 }
+
+pub async fn posts_by_thread(
+    pool: &SqlitePool,
+    thread_id: i64,
+) -> Result<Vec<models::Post>, sqlx::Error> {
+    sqlx::query_as::<_, models::Post>(
+        "select \
+        id, thread_id, created_at, bumped_at, active, image_id, screen_name, body, in_reply_to \
+        from posts where thread_id = ?",
+    )
+    .bind(thread_id)
+    .fetch_all(pool)
+    .await
+}

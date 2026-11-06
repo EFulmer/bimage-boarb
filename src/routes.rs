@@ -45,12 +45,16 @@ pub async fn thread(pool: SqlitePool, board_slug: String, thread_id: i64) -> Res
     // TODO: actual params, looking up the thread in da database, etc.
     match queries::board_by_slug(&pool, &board_slug).await {
         Ok(board) => match queries::thread_by_id(&pool, board.id, thread_id).await {
-            Ok(thread) => {
-                println!("still a WIP lol");
-                let my_posts = posts();
-                warp::reply::html(templates::thread_page(&board, &thread, &my_posts).into_string())
-                    .into_response()
-            }
+            Ok(thread) => match queries::posts_by_thread(&pool, thread.id).await {
+                Ok(posts) => {
+                    warp::reply::html(templates::thread_page(&board, &thread, &posts).into_string())
+                        .into_response()
+                }
+                Err(e) => {
+                    eprintln!("posts_by_thread failed: {e}");
+                    internal_server_error_page()
+                }
+            },
             Err(Error::RowNotFound) => {
                 eprintln!("board not found: {board_slug}");
                 not_found_page(
@@ -74,41 +78,6 @@ pub async fn thread(pool: SqlitePool, board_slug: String, thread_id: i64) -> Res
             internal_server_error_page()
         }
     }
-}
-
-fn posts() -> Vec<models::Post> {
-    vec![
-        models::Post {
-            id: 1,
-            thread_id: 0,
-            created_at: 0,
-            active: true,
-            image_id: None,
-            body: String::from("Tope!"),
-            screen_name: Some(String::from("Shane")),
-            in_reply_to: None,
-        },
-        models::Post {
-            thread_id: 0,
-            id: 2,
-            created_at: 1000,
-            active: true,
-            image_id: None,
-            screen_name: Some(String::from("Eric")),
-            body: String::from("Tup top nory."),
-            in_reply_to: Some(1),
-        },
-        models::Post {
-            id: 3,
-            thread_id: 0,
-            created_at: 20000,
-            active: false,
-            image_id: None,
-            screen_name: Some(String::from("Stef")),
-            body: String::from("D'oh!"),
-            in_reply_to: Some(1),
-        },
-    ]
 }
 
 fn internal_server_error_page() -> Response {
