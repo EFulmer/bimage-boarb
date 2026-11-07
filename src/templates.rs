@@ -115,7 +115,7 @@ pub fn thread_page(
                     h1.page-title { (thread.title) }
                     p.meta { "Started " (timestamp(thread.created_at)) }
                 }
-                div.post-body { (thread.body) }
+                (post_body(&thread.body))
             }
             section.replies aria-label="Replies" {
                 h2.replies-heading { (reply_count_label(posts.len())) }
@@ -166,9 +166,112 @@ fn post_card(post: &models::Post) -> Markup {
             @if let Some(parent) = post.in_reply_to {
                 p.reply-to { a href={ "#p" (parent) } { ">>" (parent) } }
             }
-            div.post-body { (post.body) }
+            (post_body(&post.body))
         }
     }
+}
+
+/// Renders a post body with imageboard-style markup. Lines keep their breaks (`.post-body` is
+/// `pre-wrap`); a line starting with `>` is a quote, `>>123` links to post 123, and http(s)
+/// URLs become links. Everything else goes through maud's escaping like any other text.
+fn post_body(body: &str) -> Markup {
+    html! {
+        div.post-body {
+            @for (i, line) in body.lines().enumerate() {
+                @if i > 0 { "\n" }
+                @if is_quote_line(line) {
+                    span.quote { (inline(line)) }
+                } @else {
+                    (inline(line))
+                }
+            }
+        }
+    }
+}
+
+/// `>text` is a quote, but a line that opens with a `>>123` reference is not.
+fn is_quote_line(line: &str) -> bool {
+    line.starts_with('>') && post_ref(line).is_none()
+}
+
+/// A piece of one line of a post body.
+#[derive(Debug, PartialEq)]
+enum Span<'a> {
+    Text(&'a str),
+    PostRef(i64),
+    Url(&'a str),
+}
+
+fn inline(line: &str) -> Markup {
+    html! {
+        @for span in spans(line) {
+            @match span {
+                Span::Text(text) => (text),
+                Span::PostRef(id) => a.post-ref href={ "#p" (id) } { ">>" (id) },
+                Span::Url(url) => a href=(url) rel="nofollow noopener noreferrer ugc" { (url) },
+            }
+        }
+    }
+}
+
+/// Splits a line into plain text, `>>123` references and URLs, scanning left to right.
+fn spans(line: &str) -> Vec<Span<'_>> {
+    let mut out = Vec::new();
+    let mut text_start = 0;
+    let mut i = 0;
+    while i < line.len() {
+        let rest = &line[i..];
+        let after_word = line[..i]
+            .chars()
+            .next_back()
+            .is_some_and(char::is_alphanumeric);
+        let found = post_ref(rest).or_else(|| if after_word { None } else { url(rest) });
+        match found {
+            Some((len, span)) => {
+                if text_start < i {
+                    out.push(Span::Text(&line[text_start..i]));
+                }
+                out.push(span);
+                i += len;
+                text_start = i;
+            }
+            // Step a whole character so `i` always stays on a UTF-8 boundary.
+            None => i += rest.chars().next().map_or(1, char::len_utf8),
+        }
+    }
+    if text_start < line.len() {
+        out.push(Span::Text(&line[text_start..]));
+    }
+    out
+}
+
+/// `>>` followed by digits, returning the matched length and the post id.
+fn post_ref(s: &str) -> Option<(usize, Span<'_>)> {
+    let digits = s.strip_prefix(">>")?;
+    let len = digits.bytes().take_while(u8::is_ascii_digit).count();
+    let id = digits[..len].parse().ok()?;
+    Some((2 + len, Span::PostRef(id)))
+}
+
+/// An http(s) URL running to the next whitespace, minus trailing punctuation that's more
+/// likely to end the sentence than the URL. A `)` is kept when it closes a `(` inside the
+/// URL, as in Wikipedia links.
+fn url(s: &str) -> Option<(usize, Span<'_>)> {
+    let scheme = ["https://", "http://"]
+        .into_iter()
+        .find(|p| s.starts_with(p))?;
+    let mut end = s.find(char::is_whitespace).unwrap_or(s.len());
+    loop {
+        let candidate = &s[..end];
+        match candidate.chars().next_back() {
+            Some('.' | ',' | ';' | ':' | '!' | '?' | '\'' | '"') => end -= 1,
+            Some(')') if candidate.matches('(').count() < candidate.matches(')').count() => {
+                end -= 1
+            }
+            _ => break,
+        }
+    }
+    (end > scheme.len()).then(|| (end, Span::Url(&s[..end])))
 }
 
 fn reply_count_label(count: usize) -> String {
@@ -275,6 +378,53 @@ mod tests {
         assert_eq!(excerpt("short", 10), "short");
         assert_eq!(excerpt("héllo wörld", 6), "héllo…");
         assert_eq!(excerpt("🦀🦀🦀", 2), "🦀🦀…");
+    }
+
+    #[test]
+    fn spans_find_refs_and_urls() {
+        assert_eq!(spans("plain"), vec![Span::Text("plain")]);
+        assert_eq!(
+            spans("see >>12, ok"),
+            vec![Span::Text("see "), Span::PostRef(12), Span::Text(", ok")]
+        );
+        assert_eq!(spans(">>"), vec![Span::Text(">>")]);
+        assert_eq!(spans(">>>5"), vec![Span::Text(">"), Span::PostRef(5)]);
+        assert_eq!(
+            spans("go to https://example.com/a?b=1."),
+            vec![
+                Span::Text("go to "),
+                Span::Url("https://example.com/a?b=1"),
+                Span::Text(".")
+            ]
+        );
+        assert_eq!(
+            spans("(https://en.wikipedia.org/wiki/Rust_(language))"),
+            vec![
+                Span::Text("("),
+                Span::Url("https://en.wikipedia.org/wiki/Rust_(language)"),
+                Span::Text(")"),
+            ]
+        );
+        assert_eq!(spans("https://"), vec![Span::Text("https://")]);
+        assert_eq!(spans("xhttp://a.b"), vec![Span::Text("xhttp://a.b")]);
+        assert_eq!(
+            spans("🦀 http://a.b"),
+            vec![Span::Text("🦀 "), Span::Url("http://a.b")]
+        );
+    }
+
+    #[test]
+    fn post_body_quotes_and_escapes() {
+        let html = post_body(">be me\n>>3 hi\n<b>").into_string();
+        assert_eq!(
+            html,
+            "<div class=\"post-body\"><span class=\"quote\">&gt;be me</span>\n\
+             <a class=\"post-ref\" href=\"#p3\">&gt;&gt;3</a> hi\n&lt;b&gt;</div>"
+        );
+        // Only http(s) is linked, so there's no way to smuggle in a javascript: href.
+        let html = post_body("javascript:alert(1) https://x.y/\"onmouseover=").into_string();
+        assert!(!html.contains("href=\"javascript"));
+        assert!(html.contains("href=\"https://x.y/&quot;onmouseover=\""));
     }
 
     #[test]
