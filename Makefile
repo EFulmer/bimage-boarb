@@ -1,4 +1,4 @@
-.PHONY: fmt build run create_schema tools create-db migrate-db seed-db
+.PHONY: fmt build run create_schema tools create-db migrate-db seed-db lint
 
 # Dev installation:
 tools:
@@ -10,6 +10,9 @@ build: fmt
 
 fmt:
 	cargo fmt
+
+lint:
+	cargo clippy --all-targets -- -D warnings
 
 run: fmt
 	cargo run
