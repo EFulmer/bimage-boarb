@@ -1,7 +1,7 @@
 use sqlx::{Error, SqlitePool};
 use warp::{Reply, http::StatusCode, reply::Response};
 
-use crate::{models, queries, templates};
+use crate::{models, queries, templates, types};
 
 pub fn healthz() -> impl warp::Reply {
     let resp_body = models::Healthz { ok: true };
@@ -42,42 +42,49 @@ pub async fn board(pool: SqlitePool, board_slug: String) -> Response {
 }
 
 pub async fn thread(pool: SqlitePool, board_slug: String, thread_id: i64) -> Response {
-    // TODO: actual params, looking up the thread in da database, etc.
-    match queries::board_by_slug(&pool, &board_slug).await {
-        Ok(board) => match queries::thread_by_id(&pool, board.id, thread_id).await {
-            Ok(thread) => match queries::posts_by_thread(&pool, thread.id).await {
-                Ok(posts) => {
-                    warp::reply::html(templates::thread_page(&board, &thread, &posts).into_string())
-                        .into_response()
-                }
-                Err(e) => {
-                    eprintln!("posts_by_thread failed: {e}");
-                    internal_server_error_page()
-                }
-            },
-            Err(Error::RowNotFound) => {
-                eprintln!("board not found: {board_slug}");
-                not_found_page(
-                    "Thread",
-                    &thread_id.to_string(),
-                    "This thread is unavailable... \
-                        or maybe it was never available in the first place? Much to think about.",
-                )
-            }
-            Err(e) => {
-                eprintln!("thread_by_id failed: {e}");
-                internal_server_error_page()
-            }
-        },
-        Err(Error::RowNotFound) => {
-            eprintln!("board not found: {board_slug}");
-            board_not_found(&board_slug)
+    match get_thread(&pool, &board_slug, thread_id).await {
+        Ok(thread_template) => warp::reply::html(thread_template.into_string()).into_response(),
+        Err(types::RouteError::BoardNotFound(bs)) => {
+            eprintln!("board not found: {bs}");
+            board_not_found(&bs)
         }
-        Err(e) => {
-            eprintln!("board_by_slug failed: {e}");
+        Err(types::RouteError::ThreadNotFound(tid)) => {
+            eprintln!("thread not found! {board_slug}/threads/{tid}");
+            not_found_page(
+                "Thread",
+                &thread_id.to_string(),
+                "This thread is unavailable... \
+                        or maybe it was never available in the first place? Much to think about.",
+            )
+        }
+        Err(types::RouteError::Db(e)) => {
+            eprintln!("query failed: {e}");
             internal_server_error_page()
         }
     }
+}
+
+async fn get_thread(
+    pool: &SqlitePool,
+    board_slug: &str,
+    thread_id: i64,
+) -> Result<maud::Markup, types::RouteError> {
+    let board = queries::board_by_slug(pool, board_slug)
+        .await
+        .map_err(|e| match e {
+            Error::RowNotFound => types::RouteError::BoardNotFound(board_slug.to_string()),
+            e => types::RouteError::Db(e),
+        })?;
+    let thread = queries::thread_by_id(pool, board.id, thread_id)
+        .await
+        .map_err(|e| match e {
+            Error::RowNotFound => types::RouteError::ThreadNotFound(thread_id),
+            e => types::RouteError::Db(e),
+        })?;
+    let posts = queries::posts_by_thread(pool, thread.id)
+        .await
+        .map_err(types::RouteError::Db)?;
+    Ok(templates::thread_page(&board, &thread, &posts))
 }
 
 fn internal_server_error_page() -> Response {
