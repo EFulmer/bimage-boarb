@@ -56,8 +56,9 @@ pub async fn posts_by_thread(
 ) -> Result<Vec<models::Post>, sqlx::Error> {
     sqlx::query_as::<_, models::Post>(
         "select \
-        id, thread_id, created_at, bumped_at, active, image_id, screen_name, body, in_reply_to \
-        from posts where thread_id = ?",
+        id, thread_id, created_at, active, image_id, screen_name, body, in_reply_to \
+        from posts where thread_id = ? and active = 1\
+        order by created_at, id;",
     )
     .bind(thread_id)
     .fetch_all(pool)

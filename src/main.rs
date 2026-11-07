@@ -5,6 +5,7 @@ mod models;
 mod queries;
 mod routes;
 mod templates;
+mod types;
 
 #[tokio::main]
 async fn main() {
