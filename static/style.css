@@ -186,6 +186,8 @@ main { flex: 1 0 auto; width: 100%; padding-block: 2rem 3rem; }
 .post-number:hover { color: var(--accent); }
 .reply-to { font-family: var(--mono); font-size: 0.875rem; margin: 0 0 0.3rem; }
 .reply-to a { color: var(--quote); }
+.post-body .quote { color: var(--quote); }
+.post-ref { color: var(--quote); font-family: var(--mono); font-size: 0.9em; }
 
 /* Errors */
 
