@@ -1,5 +1,9 @@
+use std::convert::Infallible;
+
 use sqlx::{Error, SqlitePool};
-use warp::{Reply, http::StatusCode, reply::Response};
+use warp::{
+    Rejection, Reply, http::StatusCode, path::FullPath, reject::MethodNotAllowed, reply::Response,
+};
 
 use crate::{errors, models, queries, templates};
 
@@ -99,11 +103,39 @@ async fn get_thread(
     Ok(templates::thread_page(&board, &thread, &posts))
 }
 
-fn internal_server_error_page() -> Response {
+pub fn internal_server_error_page() -> Response {
     error_page_with_response(
         StatusCode::INTERNAL_SERVER_ERROR,
         "Internal server error.",
         "The board is having issues. The specifics have been logged for an admin to fix.",
+    )
+}
+
+#[tracing::instrument]
+pub async fn handle_rejection(err: Rejection) -> Result<Response, Infallible> {
+    if err.find::<MethodNotAllowed>().is_some() {
+        Ok(error_page_with_response(
+            StatusCode::METHOD_NOT_ALLOWED,
+            "Method not allowed",
+            "An invalid method was sent to an endpoint. \
+            The specifics have been logged for an admin to fix.",
+        ))
+    } else {
+        tracing::error!("error handling request");
+        Ok(internal_server_error_page())
+    }
+}
+
+#[tracing::instrument]
+pub fn page_not_found(path: FullPath) -> Response {
+    not_found_page(
+        "Page",
+        path.as_str(),
+        &format!(
+            "A link brought you to {}, which isn't a page that exists \
+                    on this site. Details have been logged for an admin to look into.",
+            path.as_str(),
+        ),
     )
 }
 
