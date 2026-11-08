@@ -70,3 +70,8 @@ pub struct Image {
     pub mime_type: String,
     pub original_name: Option<String>,
 }
+
+// Form limits, shared by the HTML `maxlength` attributes and server-side validation so the
+// two can't drift apart. Counted in chars (`str::chars().count()`), not bytes.
+pub const MAX_BODY_CHARS: usize = 10_000;
+pub const MAX_NAME_CHARS: usize = 64;

@@ -100,7 +100,12 @@ async fn get_thread(
     let posts = queries::posts_by_thread(pool, thread.id)
         .await
         .map_err(errors::ThreadRouteError::Db)?;
-    Ok(templates::thread_page(&board, &thread, &posts))
+    Ok(templates::thread_page(
+        &board,
+        &thread,
+        &posts,
+        &templates::ReplyForm::default(),
+    ))
 }
 
 pub fn internal_server_error_page() -> Response {
