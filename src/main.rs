@@ -36,16 +36,20 @@ async fn main() {
     let thread = db::with_pool(pool.clone())
         .and(warp::path!(String / "threads" / i64))
         .then(routes::thread);
+    let not_found = warp::path::full().map(routes::page_not_found);
 
-    let all_routes = warp::get().and(
-        favicon
-            .or(main_page)
-            .or(admin)
-            .or(healthz)
-            .or(bare_board)
-            .or(thread)
-            .with(warp::trace::request()),
-    );
+    let all_routes = warp::get()
+        .and(
+            favicon
+                .or(main_page)
+                .or(admin)
+                .or(healthz)
+                .or(bare_board)
+                .or(thread)
+                .or(not_found),
+        )
+        .recover(routes::handle_rejection)
+        .with(warp::trace::request());
 
     tracing::info!("listening on 127.0.0.1:3030");
     warp::serve(all_routes).run(([127, 0, 0, 1], 3030)).await;
