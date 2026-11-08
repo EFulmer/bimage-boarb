@@ -97,10 +97,36 @@ pub fn board_page(board: &models::Board, threads: &[models::Thread]) -> Markup {
     )
 }
 
+/// A validation problem with one form field, shown next to that field and in the error summary.
+/// `field` is the form field's `name` attribute, e.g. `"body"`.
+pub struct FieldError {
+    pub field: &'static str,
+    pub message: String,
+}
+
+/// What the reply form shows. Use `ReplyForm::default()` for a fresh, empty form; after a
+/// failed POST, pass back what the user typed plus the errors, so nothing they wrote is lost.
+#[derive(Default)]
+pub struct ReplyForm<'a> {
+    pub screen_name: &'a str,
+    pub body: &'a str,
+    pub errors: &'a [FieldError],
+}
+
+impl ReplyForm<'_> {
+    fn error_for(&self, field: &str) -> Option<&str> {
+        self.errors
+            .iter()
+            .find(|e| e.field == field)
+            .map(|e| e.message.as_str())
+    }
+}
+
 pub fn thread_page(
     board: &models::Board,
     thread: &models::Thread,
     posts: &[models::Post],
+    form: &ReplyForm,
 ) -> Markup {
     layout(
         &thread.title,
@@ -121,8 +147,66 @@ pub fn thread_page(
                 h2.replies-heading { (reply_count_label(posts.len())) }
                 @for post in posts { (post_card(post)) }
             }
+            (reply_form(board, thread, form))
         },
     )
+}
+
+/// The `#reply` fragment on the action means that when the server re-renders the page with
+/// errors, the browser lands on the form instead of the top of a long thread.
+fn reply_form(board: &models::Board, thread: &models::Thread, form: &ReplyForm) -> Markup {
+    let name_error = form.error_for("screen_name");
+    let body_error = form.error_for("body");
+    html! {
+        section.reply-section #reply aria-labelledby="reply-heading" {
+            h2.replies-heading #reply-heading { "Reply" }
+            @if !form.errors.is_empty() {
+                div.error-summary role="alert" {
+                    p.error-summary-title { "Your reply wasn't posted:" }
+                    ul {
+                        @for error in form.errors {
+                            li { a href={ "#reply-" (error.field) } { (error.message) } }
+                        }
+                    }
+                }
+            }
+            form.post-form method="post" action={ "/" (board.slug) "/threads/" (thread.id) "#reply" } {
+                div.field {
+                    label for="reply-screen_name" {
+                        "Name " span.optional { "(optional)" }
+                    }
+                    input #reply-screen_name type="text" name="screen_name"
+                        value=(form.screen_name)
+                        maxlength=(models::MAX_NAME_CHARS)
+                        placeholder=(DEFAULT_SCREEN_NAME)
+                        autocomplete="nickname"
+                        aria-invalid=[name_error.map(|_| "true")]
+                        aria-describedby=[name_error.map(|_| "reply-screen_name-error")];
+                    @if let Some(message) = name_error {
+                        p.field-error #reply-screen_name-error { (message) }
+                    }
+                }
+                div.field {
+                    label for="reply-body" { "Comment" }
+                    textarea #reply-body name="body" rows="6" required
+                        maxlength=(models::MAX_BODY_CHARS)
+                        aria-invalid=[body_error.map(|_| "true")]
+                        aria-describedby={
+                            @if body_error.is_some() { "reply-body-error " }
+                            "reply-body-hint"
+                        } { (form.body) }
+                    @if let Some(message) = body_error {
+                        p.field-error #reply-body-error { (message) }
+                    }
+                    p.hint #reply-body-hint {
+                        "Start a line with " code { ">" } " to quote, and use "
+                        code { ">>123" } " to link to post No. 123."
+                    }
+                }
+                button.button type="submit" { "Post reply" }
+            }
+        }
+    }
 }
 
 /// A full page for error responses; the handler still sets the HTTP status itself.
@@ -425,6 +509,60 @@ mod tests {
         let html = post_body("javascript:alert(1) https://x.y/\"onmouseover=").into_string();
         assert!(!html.contains("href=\"javascript"));
         assert!(html.contains("href=\"https://x.y/&quot;onmouseover=\""));
+    }
+
+    fn sample_board_and_thread() -> (models::Board, models::Thread) {
+        let board = models::Board {
+            id: 1,
+            name: "Main".to_string(),
+            slug: "main".to_string(),
+            description: "d".to_string(),
+            active: true,
+        };
+        let thread = models::Thread {
+            id: 7,
+            board_id: 1,
+            created_at: 0,
+            bumped_at: 0,
+            active: true,
+            image_id: None,
+            title: "t".to_string(),
+            body: "b".to_string(),
+        };
+        (board, thread)
+    }
+
+    #[test]
+    fn reply_form_fresh() {
+        let (board, thread) = sample_board_and_thread();
+        let html = reply_form(&board, &thread, &ReplyForm::default()).into_string();
+        assert!(html.contains("action=\"/main/threads/7#reply\""));
+        assert!(html.contains("maxlength=\"10000\""));
+        assert!(html.contains("maxlength=\"64\""));
+        assert!(!html.contains("error-summary"));
+        assert!(!html.contains("aria-invalid"));
+        assert!(html.contains("aria-describedby=\"reply-body-hint\""));
+    }
+
+    #[test]
+    fn reply_form_keeps_input_and_shows_errors() {
+        let (board, thread) = sample_board_and_thread();
+        let errors = [FieldError {
+            field: "body",
+            message: "Write something first.".to_string(),
+        }];
+        let form = ReplyForm {
+            screen_name: "<anon>",
+            body: "",
+            errors: &errors,
+        };
+        let html = reply_form(&board, &thread, &form).into_string();
+        assert!(html.contains("role=\"alert\""));
+        assert!(html.contains("href=\"#reply-body\""));
+        assert!(html.contains("value=\"&lt;anon&gt;\""));
+        assert!(html.contains("aria-describedby=\"reply-body-error reply-body-hint\""));
+        // Only the field with an error is marked invalid.
+        assert_eq!(html.matches("aria-invalid=\"true\"").count(), 1);
     }
 
     #[test]

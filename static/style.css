@@ -189,6 +189,58 @@ main { flex: 1 0 auto; width: 100%; padding-block: 2rem 3rem; }
 .post-body .quote { color: var(--quote); }
 .post-ref { color: var(--quote); font-family: var(--mono); font-size: 0.9em; }
 
+/* Forms */
+
+.reply-section { margin-top: 2rem; }
+.post-form {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.25rem;
+  display: grid;
+  gap: 1rem;
+}
+.field { display: grid; gap: 0.35rem; }
+.field label { font-weight: 600; }
+.optional { color: var(--muted); font-weight: 400; }
+.field input,
+.field textarea {
+  width: 100%;
+  font: inherit;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.55rem 0.7rem;
+}
+.field textarea { resize: vertical; min-height: 8rem; }
+.field input:focus-visible,
+.field textarea:focus-visible { outline-offset: 0; }
+.field [aria-invalid="true"] { border-color: var(--accent); border-width: 2px; }
+.hint { color: var(--muted); font-size: 0.875rem; margin: 0; }
+.hint code { font-family: var(--mono); color: var(--quote); }
+.field-error { color: var(--accent); font-size: 0.875rem; font-weight: 600; margin: 0; }
+.button {
+  justify-self: start;
+  font: 600 1rem/1 var(--sans);
+  color: var(--surface);
+  background: var(--accent);
+  border: 0;
+  border-radius: 6px;
+  padding: 0.7rem 1.1rem;
+  cursor: pointer;
+}
+.button:hover { filter: brightness(1.08); }
+.error-summary {
+  border: 2px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+  padding: 0.8rem 1.1rem;
+  margin-bottom: 1rem;
+}
+.error-summary-title { font-weight: 700; margin: 0 0 0.3rem; }
+.error-summary ul { margin: 0; padding-left: 1.2rem; }
+
 /* Errors */
 
 .error-page { text-align: center; padding-block: 3rem; }
