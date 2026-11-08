@@ -8,42 +8,44 @@ pub fn healthz() -> impl warp::Reply {
     warp::reply::with_status(warp::reply::json(&resp_body), StatusCode::OK)
 }
 
+#[tracing::instrument(skip(pool))]
 pub async fn boards(pool: SqlitePool) -> Response {
     match queries::all_boards(&pool).await {
         Ok(boards) => {
             warp::reply::html(templates::boards_page(&boards).into_string()).into_response()
         }
-        Err(e) => {
-            eprintln!("all_boards failed: {e}");
+        Err(error) => {
+            tracing::error!(?error, "all_boards query failed");
             internal_server_error_page()
         }
     }
 }
 
+#[tracing::instrument(skip(pool))]
 pub async fn board(pool: SqlitePool, board_slug: String) -> Response {
     match get_board(&pool, &board_slug).await {
         Ok(board_template) => warp::reply::html(board_template.into_string()).into_response(),
         Err(errors::BoardRouteError::NotFound(board_slug)) => {
-            eprintln!("board not found: {board_slug}");
+            tracing::warn!("board not present or inactive in database");
             board_not_found(&board_slug)
         }
-        Err(errors::BoardRouteError::Db(e)) => {
-            // TODO: more detailed error reporting than "query failed"
-            eprintln!("query failed: {e}");
+        Err(errors::BoardRouteError::Db(error)) => {
+            tracing::error!(?error, "query for board failed");
             internal_server_error_page()
         }
     }
 }
 
+#[tracing::instrument(skip(pool))]
 pub async fn thread(pool: SqlitePool, board_slug: String, thread_id: i64) -> Response {
     match get_thread(&pool, &board_slug, thread_id).await {
         Ok(thread_template) => warp::reply::html(thread_template.into_string()).into_response(),
         Err(errors::ThreadRouteError::BoardNotFound(board_slug)) => {
-            eprintln!("board not found: {board_slug}");
+            tracing::warn!("board not present or inactive in database");
             board_not_found(&board_slug)
         }
         Err(errors::ThreadRouteError::ThreadNotFound(thread_id)) => {
-            eprintln!("thread not found! {board_slug}/threads/{thread_id}");
+            tracing::warn!("thread not present or inactive in database");
             not_found_page(
                 "Thread",
                 &thread_id.to_string(),
@@ -51,9 +53,8 @@ pub async fn thread(pool: SqlitePool, board_slug: String, thread_id: i64) -> Res
                         or maybe it was never available in the first place? Much to think about.",
             )
         }
-        Err(errors::ThreadRouteError::Db(e)) => {
-            // TODO: more detailed error reporting than "query failed"
-            eprintln!("query failed: {e}");
+        Err(errors::ThreadRouteError::Db(error)) => {
+            tracing::error!(?error, "query for thread or board failed");
             internal_server_error_page()
         }
     }

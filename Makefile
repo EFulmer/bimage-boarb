@@ -1,4 +1,5 @@
 .PHONY: fmt build run create_schema tools create-db migrate-db seed-db lint
+export RUST_LOG ?= bimage_boarb=debug,info
 
 # Dev installation:
 tools:
