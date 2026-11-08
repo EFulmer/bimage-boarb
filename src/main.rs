@@ -1,3 +1,4 @@
+use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use warp::Filter;
 
 mod db;
@@ -9,6 +10,13 @@ mod templates;
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .init();
     let pool = db::make_pool().await;
 
     sqlx::migrate!()
@@ -35,8 +43,10 @@ async fn main() {
             .or(admin)
             .or(healthz)
             .or(bare_board)
-            .or(thread),
+            .or(thread)
+            .with(warp::trace::request()),
     );
 
+    tracing::info!("listening on 127.0.0.1:3030");
     warp::serve(all_routes).run(([127, 0, 0, 1], 3030)).await;
 }
