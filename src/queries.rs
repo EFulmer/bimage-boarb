@@ -64,3 +64,11 @@ pub async fn posts_by_thread(
     .fetch_all(pool)
     .await
 }
+
+pub async fn _insert_reply(
+    _pool: &SqlitePool,
+    _board_slug: &str,
+    _thread_id: i64,
+) -> Result<(), sqlx::Error> {
+    todo!()
+}

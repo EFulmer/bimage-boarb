@@ -64,6 +64,44 @@ pub async fn thread(pool: SqlitePool, board_slug: String, thread_id: i64) -> Res
     }
 }
 
+#[tracing::instrument(skip(_pool))]
+pub async fn reply(
+    _pool: SqlitePool,
+    _board_slug: String,
+    _thread_id: i64,
+    form: models::NewReply,
+) -> Response {
+    let errors = validate_fields(&form);
+    tracing::debug!(?errors);
+    todo!()
+}
+
+fn validate_fields(form: &models::NewReply) -> Result<(), Vec<templates::FieldError>> {
+    let mut errors = vec![];
+    if form.screen_name.len() > models::MAX_NAME_CHARS {
+        errors.push(templates::FieldError {
+            field: "name",
+            message: "Your screen name is too long.".to_string(),
+        });
+    }
+    if form.body.len() > models::MAX_BODY_CHARS {
+        errors.push(templates::FieldError {
+            field: "body",
+            message: "Your reply is too long.".to_string(),
+        });
+    } else if form.body.trim().is_empty() {
+        errors.push(templates::FieldError {
+            field: "body",
+            message: "Replies must be nonempty.".to_string(),
+        });
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
 async fn get_board(
     pool: &SqlitePool,
     board_slug: &str,

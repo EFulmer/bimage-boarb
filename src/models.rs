@@ -58,6 +58,13 @@ pub struct Post {
     pub in_reply_to: Option<i64>,
 }
 
+/// A fresh reply, not yet inserted into the database.
+#[derive(Debug, serde::Deserialize)]
+pub struct NewReply {
+    pub screen_name: String,
+    pub body: String,
+}
+
 #[derive(sqlx::FromRow)]
 #[expect(
     dead_code,

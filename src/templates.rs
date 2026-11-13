@@ -99,6 +99,7 @@ pub fn board_page(board: &models::Board, threads: &[models::Thread]) -> Markup {
 
 /// A validation problem with one form field, shown next to that field and in the error summary.
 /// `field` is the form field's `name` attribute, e.g. `"body"`.
+#[derive(Debug, Default)]
 pub struct FieldError {
     pub field: &'static str,
     pub message: String,
@@ -106,7 +107,7 @@ pub struct FieldError {
 
 /// What the reply form shows. Use `ReplyForm::default()` for a fresh, empty form; after a
 /// failed POST, pass back what the user typed plus the errors, so nothing they wrote is lost.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct ReplyForm<'a> {
     pub screen_name: &'a str,
     pub body: &'a str,

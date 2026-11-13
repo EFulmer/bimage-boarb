@@ -38,16 +38,27 @@ async fn main() {
         .then(routes::thread);
     let not_found = warp::path::full().map(routes::page_not_found);
 
-    let all_routes = warp::get()
-        .and(
-            favicon
-                .or(main_page)
-                .or(admin)
-                .or(healthz)
-                .or(bare_board)
-                .or(thread)
-                .or(not_found),
-        )
+    let get_routes = warp::get().and(
+        favicon
+            .or(main_page)
+            .or(admin)
+            .or(healthz)
+            .or(bare_board)
+            .or(thread)
+            .or(not_found),
+    );
+
+    let reply = db::with_pool(pool.clone())
+        .and(warp::body::content_length_limit(128 * 1024))
+        .and(warp::path!(String / "threads" / i64))
+        .and(warp::body::form())
+        .then(routes::reply);
+
+    let post_routes = warp::post().and(reply);
+
+    let all_routes = warp::any()
+        .and(get_routes)
+        .or(post_routes)
         .recover(routes::handle_rejection)
         .with(warp::trace::request());
 
