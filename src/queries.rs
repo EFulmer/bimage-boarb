@@ -64,3 +64,39 @@ pub async fn posts_by_thread(
     .fetch_all(pool)
     .await
 }
+
+pub async fn insert_reply(
+    pool: &SqlitePool,
+    board_slug: &str,
+    new_post: models::NewPost,
+) -> Result<Option<i64>, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+
+    let bumped = sqlx::query(
+        "update threads set bumped_at = unixepoch() \
+        where id = ? and active = 1
+            and board_id = (select id from boards where slug = ? and active = 1)",
+    )
+    .bind(new_post.thread_id)
+    .bind(board_slug)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+
+    if bumped == 0 {
+        return Ok(None);
+    }
+
+    let new_post_id = sqlx::query_scalar(
+        "insert into posts (thread_id, body, screen_name) \
+        values (?, ?, ?) returning id",
+    )
+    .bind(new_post.thread_id)
+    .bind(new_post.body)
+    .bind(new_post.screen_name)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(Some(new_post_id))
+}
