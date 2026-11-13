@@ -2,10 +2,19 @@ use std::convert::Infallible;
 
 use sqlx::{Error, SqlitePool};
 use warp::{
-    Rejection, Reply, http::StatusCode, path::FullPath, reject::MethodNotAllowed, reply::Response,
+    Rejection, Reply,
+    filters::body::BodyDeserializeError,
+    http::StatusCode,
+    path::FullPath,
+    reject::{MethodNotAllowed, PayloadTooLarge, UnsupportedMediaType},
+    reply::Response,
 };
 
 use crate::{errors, models, queries, templates};
+
+const SCREEN_NAME_TOO_LONG_ERROR: &str = "Your screen name is too long.";
+const REPLY_TOO_LONG_ERROR: &str = "Your reply is too long.";
+const REPLY_EMPTY_ERROR: &str = "Replies must be nonempty.";
 
 pub fn healthz() -> impl warp::Reply {
     let resp_body = models::Healthz { ok: true };
@@ -42,7 +51,14 @@ pub async fn board(pool: SqlitePool, board_slug: String) -> Response {
 
 #[tracing::instrument(skip(pool))]
 pub async fn thread(pool: SqlitePool, board_slug: String, thread_id: i64) -> Response {
-    match get_thread(&pool, &board_slug, thread_id).await {
+    match get_thread(
+        &pool,
+        &board_slug,
+        thread_id,
+        &templates::ReplyForm::default(),
+    )
+    .await
+    {
         Ok(thread_template) => warp::reply::html(thread_template.into_string()).into_response(),
         Err(errors::ThreadRouteError::BoardNotFound(board_slug)) => {
             tracing::warn!("board not present or inactive in database");
@@ -50,17 +66,120 @@ pub async fn thread(pool: SqlitePool, board_slug: String, thread_id: i64) -> Res
         }
         Err(errors::ThreadRouteError::ThreadNotFound(thread_id)) => {
             tracing::warn!("thread not present or inactive in database");
-            not_found_page(
-                "Thread",
-                &thread_id.to_string(),
-                "This thread is unavailable... \
-                        or maybe it was never available in the first place? Much to think about.",
-            )
+            thread_not_found(thread_id)
         }
         Err(errors::ThreadRouteError::Db(error)) => {
             tracing::error!(?error, "query for thread or board failed");
             internal_server_error_page()
         }
+    }
+}
+
+#[tracing::instrument(skip(pool))]
+pub async fn reply(
+    pool: SqlitePool,
+    board_slug: String,
+    thread_id: i64,
+    form: models::ReplySubmission,
+) -> Response {
+    // TODO: at some point it might be worth flattening this out via its own enum type encoding the
+    // possible ways it can fail (PostReplyStatus::Ok(NewPost), BoardNotFound, ThreadNotFound,
+    // DBError(sqlx::Error))
+    match validate_fields(thread_id, &form) {
+        Ok(new_post) => {
+            tracing::debug!(?new_post, "form submission valid, record to insert; ");
+            match queries::insert_reply(&pool, &board_slug, new_post).await {
+                Ok(Some(post_id)) => {
+                    let location = format!("/{board_slug}/threads/{thread_id}#p{post_id}");
+                    tracing::debug!(
+                        ?post_id,
+                        ?location,
+                        "it succeeded in inserting the reply! (n64 voice)"
+                    );
+                    warp::reply::with_header(
+                        // A 303 SEE OTHER will avoid form resubmission, i.e. duplicate replying.
+                        StatusCode::SEE_OTHER,
+                        "location",
+                        location,
+                    )
+                    .into_response()
+                }
+                Ok(None) => {
+                    tracing::warn!("thread not present or inactive in database");
+                    thread_not_found(thread_id)
+                }
+                Err(error) => {
+                    tracing::error!(?error, "failed to insert reply");
+                    internal_server_error_page()
+                }
+            }
+        }
+        Err(errors) => {
+            tracing::debug!(?errors, "errors in form; ");
+            let rendered_form = templates::ReplyForm {
+                screen_name: &form.screen_name,
+                body: &form.body,
+                errors: &errors,
+            };
+            // TODO: eliminate repetition.
+            match get_thread(&pool, &board_slug, thread_id, &rendered_form).await {
+                Ok(thread_template) => warp::reply::with_status(
+                    warp::reply::html(thread_template.into_string()),
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                )
+                .into_response(),
+                Err(errors::ThreadRouteError::BoardNotFound(board_slug)) => {
+                    tracing::warn!("board not present or inactive in database");
+                    board_not_found(&board_slug)
+                }
+                Err(errors::ThreadRouteError::ThreadNotFound(thread_id)) => {
+                    tracing::warn!("thread not present or inactive in database");
+                    thread_not_found(thread_id)
+                }
+                Err(errors::ThreadRouteError::Db(error)) => {
+                    tracing::error!(?error, "query for thread or board failed");
+                    internal_server_error_page()
+                }
+            }
+        }
+    }
+}
+
+fn validate_fields(
+    thread_id: i64,
+    form: &models::ReplySubmission,
+) -> Result<models::NewPost, Vec<templates::FieldError>> {
+    let mut errors = vec![];
+    if form.screen_name.trim().chars().count() > models::MAX_NAME_CHARS {
+        errors.push(templates::FieldError {
+            field: "screen_name",
+            message: SCREEN_NAME_TOO_LONG_ERROR.to_string(),
+        });
+    }
+    if form.body.trim().chars().count() > models::MAX_BODY_CHARS {
+        errors.push(templates::FieldError {
+            field: "body",
+            message: REPLY_TOO_LONG_ERROR.to_string(),
+        });
+    } else if form.body.trim().is_empty() {
+        errors.push(templates::FieldError {
+            field: "body",
+            message: REPLY_EMPTY_ERROR.to_string(),
+        });
+    }
+    if errors.is_empty() {
+        let screen_name = if form.screen_name.trim().is_empty() {
+            None
+        } else {
+            Some(form.screen_name.trim().to_string())
+        };
+        Ok(models::NewPost {
+            thread_id,
+            screen_name,
+            body: form.body.trim().to_string(),
+        })
+    } else {
+        Err(errors)
     }
 }
 
@@ -84,6 +203,7 @@ async fn get_thread(
     pool: &SqlitePool,
     board_slug: &str,
     thread_id: i64,
+    reply_form: &templates::ReplyForm<'_>,
 ) -> Result<maud::Markup, errors::ThreadRouteError> {
     let board = queries::board_by_slug(pool, board_slug)
         .await
@@ -100,12 +220,7 @@ async fn get_thread(
     let posts = queries::posts_by_thread(pool, thread.id)
         .await
         .map_err(errors::ThreadRouteError::Db)?;
-    Ok(templates::thread_page(
-        &board,
-        &thread,
-        &posts,
-        &templates::ReplyForm::default(),
-    ))
+    Ok(templates::thread_page(&board, &thread, &posts, reply_form))
 }
 
 pub fn internal_server_error_page() -> Response {
@@ -118,7 +233,31 @@ pub fn internal_server_error_page() -> Response {
 
 #[tracing::instrument]
 pub async fn handle_rejection(err: Rejection) -> Result<Response, Infallible> {
-    if err.find::<MethodNotAllowed>().is_some() {
+    if err.find::<BodyDeserializeError>().is_some() {
+        tracing::warn!("malformed request body");
+        Ok(error_page_with_response(
+            StatusCode::BAD_REQUEST,
+            "Bad request",
+            "Unexpected error submitting your reply. \
+            The specifics have been logged for an admin to fix.",
+        ))
+    } else if err.find::<PayloadTooLarge>().is_some() {
+        tracing::warn!("request payload too large");
+        Ok(error_page_with_response(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "Payload too large",
+            "Your reply was too long.",
+        ))
+    } else if err.find::<UnsupportedMediaType>().is_some() {
+        tracing::warn!("unsupported media type");
+        Ok(error_page_with_response(
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "Unsupported media type",
+            "Unexpected error submitting your reply. \
+            The specifics have been logged for an admin to fix.",
+        ))
+    } else if err.find::<MethodNotAllowed>().is_some() {
+        tracing::warn!("method not allowed");
         Ok(error_page_with_response(
             StatusCode::METHOD_NOT_ALLOWED,
             "Method not allowed",
@@ -152,6 +291,15 @@ fn board_not_found(board_name: &str) -> Response {
             "The board {board_name} doesn't exist. \
             Maybe it was misspelled, renamed, or hasn't been created yet?"
         ),
+    )
+}
+
+fn thread_not_found(thread_id: i64) -> Response {
+    not_found_page(
+        "Thread",
+        &thread_id.to_string(),
+        "This thread is unavailable... \
+                        or maybe it was never available in the first place? Much to think about.",
     )
 }
 
