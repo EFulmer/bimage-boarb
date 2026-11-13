@@ -68,15 +68,20 @@ pub async fn thread(pool: SqlitePool, board_slug: String, thread_id: i64) -> Res
 pub async fn reply(
     _pool: SqlitePool,
     _board_slug: String,
-    _thread_id: i64,
-    form: models::NewReply,
+    thread_id: i64,
+    form: models::ReplySubmission,
 ) -> Response {
-    let errors = validate_fields(&form);
-    tracing::debug!(?errors);
+    match validate_fields(thread_id, &form) {
+        Ok(new_post) => tracing::debug!(?new_post, "form submission valid, record to insert; "),
+        Err(errors) => tracing::debug!(?errors, "errors in form; "),
+    }
     todo!()
 }
 
-fn validate_fields(form: &models::NewReply) -> Result<(), Vec<templates::FieldError>> {
+fn validate_fields(
+    thread_id: i64,
+    form: &models::ReplySubmission,
+) -> Result<models::NewPost, Vec<templates::FieldError>> {
     let mut errors = vec![];
     if form.screen_name.len() > models::MAX_NAME_CHARS {
         errors.push(templates::FieldError {
@@ -96,7 +101,16 @@ fn validate_fields(form: &models::NewReply) -> Result<(), Vec<templates::FieldEr
         });
     }
     if errors.is_empty() {
-        Ok(())
+        let screen_name = if form.screen_name.trim().is_empty() {
+            models::DEFAULT_SCREEN_NAME.to_string()
+        } else {
+            form.screen_name.clone()
+        };
+        Ok(models::NewPost {
+            thread_id,
+            screen_name,
+            body: form.body.trim().to_string(),
+        })
     } else {
         Err(errors)
     }

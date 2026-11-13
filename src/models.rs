@@ -58,9 +58,18 @@ pub struct Post {
     pub in_reply_to: Option<i64>,
 }
 
-/// A fresh reply, not yet inserted into the database.
+/// A filled reply form accepted as the form body in a POST to `/{board_slug}/threads/{id}`. Not yet
+/// validated.
 #[derive(Debug, serde::Deserialize)]
-pub struct NewReply {
+pub struct ReplySubmission {
+    pub screen_name: String,
+    pub body: String,
+}
+
+/// A valid post yet to be inserted into the database.
+#[derive(Debug, serde::Serialize)]
+pub struct NewPost {
+    pub thread_id: i64,
     pub screen_name: String,
     pub body: String,
 }
@@ -82,3 +91,5 @@ pub struct Image {
 // two can't drift apart. Counted in chars (`str::chars().count()`), not bytes.
 pub const MAX_BODY_CHARS: usize = 10_000;
 pub const MAX_NAME_CHARS: usize = 64;
+
+pub const DEFAULT_SCREEN_NAME: &str = "Imbecile";

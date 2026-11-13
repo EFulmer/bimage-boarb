@@ -11,7 +11,6 @@ const FAVICON: &str = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg
 <rect width='32' height='32' rx='7' fill='%23b5400c'/>\
 <text x='14' y='24' text-anchor='middle' font-family='Georgia,serif' font-weight='700' font-size='22' fill='%23fffcf5'>b</text>\
 <circle cx='25' cy='21' r='2.5' fill='%23fffcf5'/></svg>";
-const DEFAULT_SCREEN_NAME: &str = "Zorro";
 const EXCERPT_CHARS: usize = 280;
 
 pub fn layout(title: &str, body: Markup) -> Markup {
@@ -179,7 +178,7 @@ fn reply_form(board: &models::Board, thread: &models::Thread, form: &ReplyForm) 
                     input #reply-screen_name type="text" name="screen_name"
                         value=(form.screen_name)
                         maxlength=(models::MAX_NAME_CHARS)
-                        placeholder=(DEFAULT_SCREEN_NAME)
+                        placeholder=(models::DEFAULT_SCREEN_NAME)
                         autocomplete="nickname"
                         aria-invalid=[name_error.map(|_| "true")]
                         aria-describedby=[name_error.map(|_| "reply-screen_name-error")];
@@ -240,7 +239,7 @@ fn post_card(post: &models::Post) -> Markup {
         .screen_name
         .as_deref()
         .filter(|name| !name.trim().is_empty())
-        .unwrap_or(DEFAULT_SCREEN_NAME);
+        .unwrap_or(models::DEFAULT_SCREEN_NAME);
     html! {
         article.post id={ "p" (post.id) } {
             header.post-header {
