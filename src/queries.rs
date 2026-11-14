@@ -65,10 +65,40 @@ pub async fn posts_by_thread(
     .await
 }
 
-pub async fn _insert_reply(
-    _pool: &SqlitePool,
-    _board_slug: &str,
-    _thread_id: i64,
-) -> Result<(), sqlx::Error> {
-    todo!()
+pub async fn insert_reply(
+    pool: &SqlitePool,
+    board_slug: &str,
+    thread_id: i64,
+    new_post: models::NewPost,
+) -> Result<Option<i64>, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let bumped = sqlx::query(
+        "update threads set bumped_at = unixepoch() \
+        where id = ? and active = 1
+            and board_id = (select id from boards where slug = ? and active = 1)",
+    )
+    .bind(thread_id)
+    .bind(board_slug)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    tracing::info!(?bumped);
+    if bumped == 0 {
+        return Ok(None);
+    }
+    let insert = sqlx::query_as::<_, models::Post>(
+        "insert into posts (thread_id, body, screen_name) \
+        values (?, ?, ?) returning *",
+    )
+    .bind(thread_id)
+    .bind(new_post.body)
+    .bind(new_post.screen_name)
+    .fetch_one(&mut *tx)
+    .await;
+    // tracing::info!(?insert);
+    tx.commit().await?;
+    match insert {
+        Ok(post) => Ok(Some(post.id)),
+        Err(e) => Err(e),
+    }
 }

@@ -16,7 +16,7 @@ pub struct Board {
     pub active: bool,
 }
 
-#[derive(sqlx::FromRow)]
+#[derive(Debug, sqlx::FromRow)]
 pub struct Thread {
     pub id: i64,
     #[expect(dead_code, reason = "used in queries, and usage will expand later")]

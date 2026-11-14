@@ -50,12 +50,7 @@ pub async fn thread(pool: SqlitePool, board_slug: String, thread_id: i64) -> Res
         }
         Err(errors::ThreadRouteError::ThreadNotFound(thread_id)) => {
             tracing::warn!("thread not present or inactive in database");
-            not_found_page(
-                "Thread",
-                &thread_id.to_string(),
-                "This thread is unavailable... \
-                        or maybe it was never available in the first place? Much to think about.",
-            )
+            thread_not_found(thread_id)
         }
         Err(errors::ThreadRouteError::Db(error)) => {
             tracing::error!(?error, "query for thread or board failed");
@@ -64,18 +59,53 @@ pub async fn thread(pool: SqlitePool, board_slug: String, thread_id: i64) -> Res
     }
 }
 
-#[tracing::instrument(skip(_pool))]
+#[tracing::instrument(skip(pool))]
 pub async fn reply(
-    _pool: SqlitePool,
-    _board_slug: String,
+    pool: SqlitePool,
+    board_slug: String,
     thread_id: i64,
     form: models::ReplySubmission,
 ) -> Response {
+    // TODO: at some point it might be worht flattening this out via its own enum type encoding the
+    // possible ways it can fail (PostReplyStatus::Ok(NewPost), BoardNotFound, ThreadNotFound,
+    // DBError(sqlx::Error))
     match validate_fields(thread_id, &form) {
-        Ok(new_post) => tracing::debug!(?new_post, "form submission valid, record to insert; "),
-        Err(errors) => tracing::debug!(?errors, "errors in form; "),
+        Ok(new_post) => {
+            tracing::debug!(?new_post, "form submission valid, record to insert; ");
+            match queries::insert_reply(&pool, &board_slug, thread_id, new_post).await {
+                Ok(Some(post_id)) => {
+                    let location = format!("/{board_slug}/threads/{thread_id}#p{post_id}");
+                    tracing::debug!(
+                        ?post_id,
+                        ?location,
+                        "it succeeded in inserting the reply! (n64 voice)"
+                    );
+                    warp::reply::with_header(
+                        // A 303 SEE OTHER will avoid form resubmission, i.e. duplicate replying.
+                        StatusCode::SEE_OTHER,
+                        "location",
+                        location,
+                    )
+                    .into_response()
+                }
+                Ok(None) => {
+                    tracing::warn!("thread not present or inactive in database");
+                    thread_not_found(thread_id)
+                }
+                Err(error) => {
+                    tracing::error!(
+                        ?error,
+                        "failed to insert reply because of something or other"
+                    );
+                    internal_server_error_page()
+                }
+            }
+        }
+        Err(errors) => {
+            tracing::debug!(?errors, "errors in form; ");
+            internal_server_error_page()
+        }
     }
-    todo!()
 }
 
 fn validate_fields(
@@ -204,6 +234,15 @@ fn board_not_found(board_name: &str) -> Response {
             "The board {board_name} doesn't exist. \
             Maybe it was misspelled, renamed, or hasn't been created yet?"
         ),
+    )
+}
+
+fn thread_not_found(thread_id: i64) -> Response {
+    not_found_page(
+        "Thread",
+        &thread_id.to_string(),
+        "This thread is unavailable... \
+                        or maybe it was never available in the first place? Much to think about.",
     )
 }
 
