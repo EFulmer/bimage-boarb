@@ -1,8 +1,10 @@
+/// Response from the `/healthz` endpoint; just a bool indicating whether or not the service is up at all.
 #[derive(serde::Serialize)]
 pub struct Healthz {
     pub ok: bool,
 }
 
+/// 1:1 correspondence with a row from the `boards` table; i.e. a board.
 #[derive(sqlx::FromRow)]
 pub struct Board {
     pub id: i64,
@@ -16,36 +18,36 @@ pub struct Board {
     pub active: bool,
 }
 
+/// 1:1 correspondence with a row from the `threads` table; i.e. a thread.
 #[derive(Debug, sqlx::FromRow)]
 pub struct Thread {
     pub id: i64,
     #[expect(dead_code, reason = "used in queries, and usage will expand later")]
     pub board_id: i64,
     pub created_at: i64,
+    #[expect(dead_code, reason = "present in schema, and usage will expand later")]
     pub bumped_at: i64,
     #[expect(
         dead_code,
-        reason = "queries filter on active, plus admin will need to use it."
+        reason = "queries filter on active (missed by Rust's checks), plus admin will need to use it."
     )]
     pub active: bool,
-    #[expect(
-        dead_code,
-        reason = "images haven't yet been implemented but they exist in the schema."
-    )]
-    pub image_id: Option<i64>,
     pub title: String,
-    pub body: String,
 }
 
+/// 1:1 correspondence with a row from the `posts` table; i.e. a post.
 #[derive(sqlx::FromRow)]
 pub struct Post {
     pub id: i64,
-    #[expect(dead_code, reason = "used in queries, and usage will expand later")]
+    #[expect(
+        dead_code,
+        reason = "used in queries (missed by Rust's checks), and usage will expand later"
+    )]
     pub thread_id: i64,
     pub created_at: i64,
     #[expect(
         dead_code,
-        reason = "queries filter on active, plus admin will need to use it."
+        reason = "queries filter on active (missed by Rust's checks), plus admin will need to use it."
     )]
     pub active: bool,
     #[expect(
@@ -66,7 +68,8 @@ pub struct ReplySubmission {
     pub body: String,
 }
 
-/// A valid post yet to be inserted into the database.
+/// A valid post yet to be inserted into the database; i.e. a validated `ReplySubmission` plus the
+/// thread the reply is for.
 #[derive(Debug)]
 pub struct NewPost {
     pub thread_id: i64,
@@ -85,6 +88,24 @@ pub struct Image {
     pub sha256: String,
     pub mime_type: String,
     pub original_name: Option<String>,
+}
+
+/// Preview of a thread, for the `/{board_slug}` endpoint. Combines thread metadata with the first
+/// post.
+#[derive(sqlx::FromRow)]
+pub struct ThreadSummary {
+    pub id: i64,
+    #[expect(dead_code, reason = "used in queries, and usage will expand later")]
+    pub board_id: i64,
+    pub created_at: i64,
+    pub bumped_at: i64,
+    #[expect(
+        dead_code,
+        reason = "queries filter on active (missed by Rust's checks), plus admin will need to use it."
+    )]
+    pub active: bool,
+    pub title: String,
+    pub first_post_body: String,
 }
 
 // Form limits, shared by the HTML `maxlength` attributes and server-side validation so the

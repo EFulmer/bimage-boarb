@@ -171,7 +171,11 @@ main { flex: 1 0 auto; width: 100%; padding-block: 2rem 3rem; }
   margin-left: clamp(0rem, 3vw, 1.5rem);
   scroll-margin-top: 1rem;
 }
-.post:target { border-color: var(--accent); background: var(--accent-soft); }
+.post:target,
+.thread:target { border-color: var(--accent); background: var(--accent-soft); }
+.thread { scroll-margin-top: 1rem; }
+.op .post-number { font-family: var(--mono); color: var(--muted); text-decoration: none; }
+.op .post-number:hover { color: var(--accent); }
 .post-header {
   display: flex;
   flex-wrap: wrap;
