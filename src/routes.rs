@@ -196,7 +196,11 @@ async fn get_board(
     let threads = queries::threads_by_board(pool, board.id)
         .await
         .map_err(errors::BoardRouteError::Db)?;
-    Ok(templates::board_page(&board, &threads))
+    Ok(templates::board_page(
+        &board,
+        &threads,
+        &templates::ThreadForm::default(),
+    ))
 }
 
 async fn get_thread(

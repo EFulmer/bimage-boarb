@@ -235,6 +235,22 @@ main { flex: 1 0 auto; width: 100%; padding-block: 2rem 3rem; }
   cursor: pointer;
 }
 .button:hover { filter: brightness(1.08); }
+.new-thread { margin-bottom: 1.5rem; }
+.new-thread > summary {
+  display: inline-block;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--accent);
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  list-style: none;
+}
+.new-thread > summary::-webkit-details-marker { display: none; }
+.new-thread > summary::before { content: "+ "; }
+.new-thread[open] > summary { margin-bottom: 0.75rem; }
+.new-thread[open] > summary::before { content: "− "; }
 .error-summary {
   border: 2px solid var(--accent);
   background: var(--accent-soft);

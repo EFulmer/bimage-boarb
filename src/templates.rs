@@ -67,11 +67,16 @@ pub fn boards_page(boards: &[models::Board]) -> Markup {
     )
 }
 
-pub fn board_page(board: &models::Board, threads: &[models::ThreadSummary]) -> Markup {
+pub fn board_page(
+    board: &models::Board,
+    threads: &[models::ThreadSummary],
+    form: &ThreadForm,
+) -> Markup {
     layout(
         &board.name,
         html! {
             (board_header(board))
+            (new_thread_form(board, form))
             @if threads.is_empty() {
                 p.empty { "No threads yet." }
             } @else {
@@ -115,13 +120,21 @@ pub struct ReplyForm<'a> {
     pub errors: &'a [FieldError],
 }
 
-impl ReplyForm<'_> {
-    fn error_for(&self, field: &str) -> Option<&str> {
-        self.errors
-            .iter()
-            .find(|e| e.field == field)
-            .map(|e| e.message.as_str())
-    }
+/// What the new-thread form on the board page shows. Same idea as `ReplyForm`, plus a title.
+/// Error `field`s are `"title"`, `"screen_name"` and `"body"`.
+#[derive(Debug, Default)]
+pub struct ThreadForm<'a> {
+    pub title: &'a str,
+    pub screen_name: &'a str,
+    pub body: &'a str,
+    pub errors: &'a [FieldError],
+}
+
+fn error_for<'e>(errors: &'e [FieldError], field: &str) -> Option<&'e str> {
+    errors
+        .iter()
+        .find(|e| e.field == field)
+        .map(|e| e.message.as_str())
 }
 
 /// `posts` is the whole thread in display order: the first post is the opening post, shown under
@@ -175,55 +188,104 @@ pub fn thread_page(
 /// The `#reply` fragment on the action means that when the server re-renders the page with
 /// errors, the browser lands on the form instead of the top of a long thread.
 fn reply_form(board: &models::Board, thread: &models::Thread, form: &ReplyForm) -> Markup {
-    let name_error = form.error_for("screen_name");
-    let body_error = form.error_for("body");
     html! {
         section.reply-section #reply aria-labelledby="reply-heading" {
             h2.replies-heading #reply-heading { "Reply" }
-            @if !form.errors.is_empty() {
-                div.error-summary role="alert" {
-                    p.error-summary-title { "Your reply wasn't posted:" }
-                    ul {
-                        @for error in form.errors {
-                            li { a href={ "#reply-" (error.field) } { (error.message) } }
-                        }
+            (error_summary("reply", "Your reply wasn't posted:", form.errors))
+            form.post-form method="post" action={ "/" (board.slug) "/threads/" (thread.id) "#reply" } {
+                (name_field("reply", form.screen_name, error_for(form.errors, "screen_name")))
+                (body_field("reply", form.body, error_for(form.errors, "body")))
+                button.button type="submit" { "Post reply" }
+            }
+        }
+    }
+}
+
+/// Collapsed behind a "Start a new thread" toggle so it doesn't push the thread list down; it
+/// opens by itself when the server re-renders it with errors.
+fn new_thread_form(board: &models::Board, form: &ThreadForm) -> Markup {
+    let title_error = error_for(form.errors, "title");
+    html! {
+        details.new-thread #new-thread open[!form.errors.is_empty()] {
+            summary { "Start a new thread" }
+            (error_summary("thread", "Your thread wasn't posted:", form.errors))
+            form.post-form method="post" action={ "/" (board.slug) "#new-thread" } {
+                div.field {
+                    label for="thread-title" { "Title" }
+                    input #thread-title type="text" name="title" required
+                        value=(form.title)
+                        maxlength=(models::MAX_TITLE_CHARS)
+                        aria-invalid=[title_error.map(|_| "true")]
+                        aria-describedby=[title_error.map(|_| "thread-title-error")];
+                    @if let Some(message) = title_error {
+                        p.field-error #thread-title-error { (message) }
+                    }
+                }
+                (name_field("thread", form.screen_name, error_for(form.errors, "screen_name")))
+                (body_field("thread", form.body, error_for(form.errors, "body")))
+                button.button type="submit" { "Start thread" }
+            }
+        }
+    }
+}
+
+/// Lists every problem as a link to its field. `prefix` is the form's id prefix ("reply",
+/// "thread"), so the links point at `#{prefix}-{field}`.
+fn error_summary(prefix: &str, title: &str, errors: &[FieldError]) -> Markup {
+    html! {
+        @if !errors.is_empty() {
+            div.error-summary role="alert" {
+                p.error-summary-title { (title) }
+                ul {
+                    @for error in errors {
+                        li { a href={ "#" (prefix) "-" (error.field) } { (error.message) } }
                     }
                 }
             }
-            form.post-form method="post" action={ "/" (board.slug) "/threads/" (thread.id) "#reply" } {
-                div.field {
-                    label for="reply-screen_name" {
-                        "Name " span.optional { "(optional)" }
-                    }
-                    input #reply-screen_name type="text" name="screen_name"
-                        value=(form.screen_name)
-                        maxlength=(models::MAX_NAME_CHARS)
-                        placeholder=(models::DEFAULT_SCREEN_NAME)
-                        autocomplete="nickname"
-                        aria-invalid=[name_error.map(|_| "true")]
-                        aria-describedby=[name_error.map(|_| "reply-screen_name-error")];
-                    @if let Some(message) = name_error {
-                        p.field-error #reply-screen_name-error { (message) }
-                    }
-                }
-                div.field {
-                    label for="reply-body" { "Comment" }
-                    textarea #reply-body name="body" rows="6" required
-                        maxlength=(models::MAX_BODY_CHARS)
-                        aria-invalid=[body_error.map(|_| "true")]
-                        aria-describedby={
-                            @if body_error.is_some() { "reply-body-error " }
-                            "reply-body-hint"
-                        } { (form.body) }
-                    @if let Some(message) = body_error {
-                        p.field-error #reply-body-error { (message) }
-                    }
-                    p.hint #reply-body-hint {
-                        "Start a line with " code { ">" } " to quote, and use "
-                        code { ">>123" } " to link to post No. 123."
-                    }
-                }
-                button.button type="submit" { "Post reply" }
+        }
+    }
+}
+
+fn name_field(prefix: &str, value: &str, error: Option<&str>) -> Markup {
+    let id = format!("{prefix}-screen_name");
+    let error_id = format!("{id}-error");
+    html! {
+        div.field {
+            label for=(id) {
+                "Name " span.optional { "(optional)" }
+            }
+            input #(id) type="text" name="screen_name"
+                value=(value)
+                maxlength=(models::MAX_NAME_CHARS)
+                placeholder=(models::DEFAULT_SCREEN_NAME)
+                autocomplete="nickname"
+                aria-invalid=[error.map(|_| "true")]
+                aria-describedby=[error.map(|_| &error_id)];
+            @if let Some(message) = error {
+                p.field-error #(error_id) { (message) }
+            }
+        }
+    }
+}
+
+fn body_field(prefix: &str, value: &str, error: Option<&str>) -> Markup {
+    let id = format!("{prefix}-body");
+    html! {
+        div.field {
+            label for=(id) { "Comment" }
+            textarea #(id) name="body" rows="6" required
+                maxlength=(models::MAX_BODY_CHARS)
+                aria-invalid=[error.map(|_| "true")]
+                aria-describedby={
+                    @if error.is_some() { (id) "-error " }
+                    (id) "-hint"
+                } { (value) }
+            @if let Some(message) = error {
+                p.field-error id={ (id) "-error" } { (message) }
+            }
+            p.hint id={ (id) "-hint" } {
+                "Start a line with " code { ">" } " to quote, and use "
+                code { ">>123" } " to link to post No. 123."
             }
         }
     }
@@ -622,6 +684,39 @@ mod tests {
     }
 
     #[test]
+    fn new_thread_form_fresh_is_collapsed() {
+        let (board, _) = sample_board_and_thread();
+        let html = new_thread_form(&board, &ThreadForm::default()).into_string();
+        assert!(html.contains("<details class=\"new-thread\" id=\"new-thread\">"));
+        assert!(html.contains("action=\"/main#new-thread\""));
+        assert!(html.contains("name=\"title\""));
+        assert!(html.contains("maxlength=\"150\""));
+        assert!(html.contains("id=\"thread-body\""));
+        assert!(!html.contains("error-summary"));
+    }
+
+    #[test]
+    fn new_thread_form_with_errors_opens_and_keeps_input() {
+        let (board, _) = sample_board_and_thread();
+        let errors = [FieldError {
+            field: "title",
+            message: "Give your thread a title.".to_string(),
+        }];
+        let form = ThreadForm {
+            title: "",
+            screen_name: "",
+            body: "kept <text>",
+            errors: &errors,
+        };
+        let html = new_thread_form(&board, &form).into_string();
+        assert!(html.contains("<details class=\"new-thread\" id=\"new-thread\" open>"));
+        assert!(html.contains("href=\"#thread-title\""));
+        assert!(html.contains("aria-describedby=\"thread-title-error\""));
+        assert!(html.contains("kept &lt;text&gt;"));
+        assert_eq!(html.matches("aria-invalid=\"true\"").count(), 1);
+    }
+
+    #[test]
     fn page_escapes_user_content() {
         let board = models::Board {
             id: 1,
@@ -630,7 +725,7 @@ mod tests {
             description: "a & b".to_string(),
             active: true,
         };
-        let html = board_page(&board, &[]).into_string();
+        let html = board_page(&board, &[], &ThreadForm::default()).into_string();
         assert!(html.contains("&lt;script&gt;"));
         assert!(!html.contains("<script>"));
     }
