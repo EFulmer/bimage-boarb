@@ -112,5 +112,6 @@ pub struct ThreadSummary {
 // two can't drift apart. Counted in chars (`str::chars().count()`), not bytes.
 pub const MAX_BODY_CHARS: usize = 10_000;
 pub const MAX_NAME_CHARS: usize = 64;
+pub const MAX_TITLE_CHARS: usize = 150;
 
 pub const DEFAULT_SCREEN_NAME: &str = "Imbecile";
