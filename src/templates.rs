@@ -67,7 +67,7 @@ pub fn boards_page(boards: &[models::Board]) -> Markup {
     )
 }
 
-pub fn board_page(board: &models::Board, threads: &[models::Thread]) -> Markup {
+pub fn board_page(board: &models::Board, threads: &[models::ThreadSummary]) -> Markup {
     layout(
         &board.name,
         html! {
@@ -86,7 +86,9 @@ pub fn board_page(board: &models::Board, threads: &[models::Thread]) -> Markup {
                                     "Started " (timestamp(thread.created_at))
                                     " · last bump " (timestamp(thread.bumped_at))
                                 }
-                                p.excerpt { (excerpt(&thread.body, EXCERPT_CHARS)) }
+                                @if !thread.first_post_body.trim().is_empty() {
+                                    p.excerpt { (excerpt(&thread.first_post_body, EXCERPT_CHARS)) }
+                                }
                             }
                         }
                     }
@@ -122,12 +124,18 @@ impl ReplyForm<'_> {
     }
 }
 
+/// `posts` is the whole thread in display order: the first post is the opening post, shown under
+/// the title, and the rest are replies.
 pub fn thread_page(
     board: &models::Board,
     thread: &models::Thread,
     posts: &[models::Post],
     form: &ReplyForm,
 ) -> Markup {
+    let (opening_post, replies) = match posts.split_first() {
+        Some((first, rest)) => (Some(first), rest),
+        None => (None, posts),
+    };
     layout(
         &thread.title,
         html! {
@@ -136,16 +144,28 @@ pub fn thread_page(
                 " / "
                 a href={ "/" (board.slug) } { "/" (board.slug) "/" }
             }
-            article.thread {
+            article.thread id=[opening_post.map(|op| format!("p{}", op.id))] {
                 header.op {
                     h1.page-title { (thread.title) }
-                    p.meta { "Started " (timestamp(thread.created_at)) }
+                    p.meta {
+                        @if let Some(op) = opening_post {
+                            span.screen-name { (screen_name(op)) }
+                            " · "
+                        }
+                        "Started " (timestamp(thread.created_at))
+                        @if let Some(op) = opening_post {
+                            " · "
+                            a.post-number href={ "#p" (op.id) } title="Link to this post" { "No. " (op.id) }
+                        }
+                    }
                 }
-                (post_body(&thread.body))
+                @if let Some(op) = opening_post {
+                    (post_body(&op.body))
+                }
             }
             section.replies aria-label="Replies" {
-                h2.replies-heading { (reply_count_label(posts.len())) }
-                @for post in posts { (post_card(post)) }
+                h2.replies-heading { (reply_count_label(replies.len())) }
+                @for post in replies { (post_card(post)) }
             }
             (reply_form(board, thread, form))
         },
@@ -234,16 +254,19 @@ fn board_header(board: &models::Board) -> Markup {
     }
 }
 
-fn post_card(post: &models::Post) -> Markup {
-    let name = post
-        .screen_name
+/// The post's screen name, or the default for anonymous posts.
+fn screen_name(post: &models::Post) -> &str {
+    post.screen_name
         .as_deref()
         .filter(|name| !name.trim().is_empty())
-        .unwrap_or(models::DEFAULT_SCREEN_NAME);
+        .unwrap_or(models::DEFAULT_SCREEN_NAME)
+}
+
+fn post_card(post: &models::Post) -> Markup {
     html! {
         article.post id={ "p" (post.id) } {
             header.post-header {
-                span.screen-name { (name) }
+                span.screen-name { (screen_name(post)) }
                 (timestamp(post.created_at))
                 a.post-number href={ "#p" (post.id) } title="Link to this post" { "No. " (post.id) }
             }
@@ -525,11 +548,44 @@ mod tests {
             created_at: 0,
             bumped_at: 0,
             active: true,
-            image_id: None,
             title: "t".to_string(),
-            body: "b".to_string(),
         };
         (board, thread)
+    }
+
+    fn sample_post(id: i64, body: &str) -> models::Post {
+        models::Post {
+            id,
+            thread_id: 7,
+            created_at: 0,
+            active: true,
+            image_id: None,
+            screen_name: None,
+            body: body.to_string(),
+            in_reply_to: None,
+        }
+    }
+
+    #[test]
+    fn thread_page_splits_opening_post_from_replies() {
+        let (board, thread) = sample_board_and_thread();
+        let posts = [sample_post(1, "opening"), sample_post(2, "a reply")];
+        let html = thread_page(&board, &thread, &posts, &ReplyForm::default()).into_string();
+        // The opening post is the thread article itself, so `>>1` and `#p1` links land on it.
+        assert!(html.contains("<article class=\"thread\" id=\"p1\">"));
+        assert!(html.contains("opening"));
+        // Only real replies are counted and rendered as reply cards.
+        assert!(html.contains("1 reply"));
+        assert_eq!(html.matches("class=\"post\"").count(), 1);
+        assert!(html.contains("No. 1"));
+    }
+
+    #[test]
+    fn thread_page_without_posts_still_renders() {
+        let (board, thread) = sample_board_and_thread();
+        let html = thread_page(&board, &thread, &[], &ReplyForm::default()).into_string();
+        assert!(html.contains("<article class=\"thread\">"));
+        assert!(html.contains("No replies yet"));
     }
 
     #[test]

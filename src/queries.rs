@@ -25,9 +25,13 @@ pub async fn board_by_slug(
 pub async fn threads_by_board(
     pool: &SqlitePool,
     board_id: i64,
-) -> Result<Vec<models::Thread>, sqlx::Error> {
-    sqlx::query_as::<_, models::Thread>(
-        "select id, board_id, created_at, bumped_at, active, image_id, title, body \
+) -> Result<Vec<models::ThreadSummary>, sqlx::Error> {
+    sqlx::query_as::<_, models::ThreadSummary>(
+        "select id, board_id, created_at, bumped_at, active, title, \
+        coalesce( \
+            (select body from posts where thread_id = threads.id order by created_at, id limit 1), \
+            '') \
+        as first_post_body
         from threads where board_id = ? and active = 1 order by bumped_at desc;",
     )
     .bind(board_id)
@@ -41,7 +45,7 @@ pub async fn thread_by_id(
     thread_id: i64,
 ) -> Result<models::Thread, sqlx::Error> {
     sqlx::query_as::<_, models::Thread>(
-        "select id, board_id, created_at, bumped_at, active, image_id, title, body \
+        "select id, board_id, created_at, bumped_at, active, title \
         from threads where id = ? and board_id = ? and active = 1 limit 1;",
     )
     .bind(thread_id)

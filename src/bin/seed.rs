@@ -16,7 +16,6 @@ struct ThreadRow {
     created_at: i64,
     bumped_at: i64,
     title: String,
-    body: String,
 }
 
 #[derive(Deserialize)]
@@ -53,15 +52,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for row in reader.deserialize::<ThreadRow>() {
         let thread = row?;
         sqlx::query(
-            "insert or ignore into threads (id, board_id, created_at, bumped_at, title, body) \
-             values (?, ?, ?, ?, ?, ?)",
+            "insert or ignore into threads (id, board_id, created_at, bumped_at, title) \
+             values (?, ?, ?, ?, ?)",
         )
         .bind(thread.id)
         .bind(thread.board_id)
         .bind(thread.created_at)
         .bind(thread.bumped_at)
         .bind(thread.title)
-        .bind(thread.body)
         .execute(&pool)
         .await?;
     }
