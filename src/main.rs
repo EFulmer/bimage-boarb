@@ -53,8 +53,13 @@ async fn main() {
         .and(warp::path!(String / "threads" / i64))
         .and(warp::body::form())
         .then(routes::reply);
+    let new_thread = db::with_pool(pool.clone())
+        .and(warp::body::content_length_limit(128 * 1024))
+        .and(warp::path!(String))
+        .and(warp::body::form())
+        .then(routes::new_thread);
 
-    let post_routes = warp::post().and(reply);
+    let post_routes = warp::post().and(reply.or(new_thread));
 
     let all_routes = get_routes
         .or(post_routes)

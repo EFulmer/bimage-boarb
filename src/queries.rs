@@ -69,6 +69,39 @@ pub async fn posts_by_thread(
     .await
 }
 
+// TODO: use more descriptive error type rather than Ok(None)
+pub async fn make_thread(
+    pool: &SqlitePool,
+    new_thread: models::NewThread,
+) -> Result<Option<i64>, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    // This requires two inserts; one for the thread and one for its OP.
+    let Some(new_thread_id) = sqlx::query_scalar(
+        "insert into threads (board_id, title) \
+        select id, ? from boards where slug = ? and active = 1 \
+        returning id",
+    )
+    .bind(new_thread.title)
+    .bind(new_thread.board_slug)
+    .fetch_optional(&mut *tx)
+    .await?
+    else {
+        return Ok(None);
+    };
+    sqlx::query(
+        "insert into posts (thread_id, screen_name, body) \
+        values (?, ?, ?)",
+    )
+    .bind(new_thread_id)
+    .bind(new_thread.screen_name)
+    .bind(new_thread.body)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(Some(new_thread_id))
+}
+
+// TODO: use more descriptive error type rather than Ok(None)
 pub async fn insert_reply(
     pool: &SqlitePool,
     board_slug: &str,
