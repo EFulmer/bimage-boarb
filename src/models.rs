@@ -5,7 +5,7 @@ pub struct Healthz {
 }
 
 /// 1:1 correspondence with a row from the `boards` table; i.e. a board.
-#[derive(sqlx::FromRow)]
+#[derive(Debug, sqlx::FromRow)]
 pub struct Board {
     pub id: i64,
     pub name: String,
@@ -58,6 +58,25 @@ pub struct Post {
     pub screen_name: Option<String>,
     pub body: String,
     pub in_reply_to: Option<i64>,
+}
+
+/// A filled thread form accepted as the form body in a POST to `/{board_slug}` to create a new
+/// thread. Not yet validated.
+#[derive(Debug, serde::Deserialize)]
+pub struct ThreadSubmission {
+    pub title: String,
+    pub screen_name: String,
+    pub body: String,
+}
+
+/// A valid thread yet to be added into the database; i.e. a validated `ThreadSubmission`, plus the
+/// board it's intended to be posted on, identified by its' slug.
+#[derive(Debug)]
+pub struct NewThread {
+    pub board_slug: String,
+    pub title: String,
+    pub screen_name: Option<String>,
+    pub body: String,
 }
 
 /// A filled reply form accepted as the form body in a POST to `/{board_slug}/threads/{id}`. Not yet

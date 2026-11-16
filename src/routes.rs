@@ -13,8 +13,10 @@ use warp::{
 use crate::{errors, models, queries, templates};
 
 const SCREEN_NAME_TOO_LONG_ERROR: &str = "Your screen name is too long.";
-const REPLY_TOO_LONG_ERROR: &str = "Your reply is too long.";
-const REPLY_EMPTY_ERROR: &str = "Replies must be nonempty.";
+const TITLE_TOO_LONG_ERROR: &str = "Your post's title is too long.";
+const TITLE_EMPTY_ERROR: &str = "Post titles cannot be empty";
+const POST_TOO_LONG_ERROR: &str = "Your post is too long.";
+const POST_EMPTY_ERROR: &str = "Your post cannot be empty.";
 
 pub fn healthz() -> impl warp::Reply {
     let resp_body = models::Healthz { ok: true };
@@ -36,7 +38,7 @@ pub async fn boards(pool: SqlitePool) -> Response {
 
 #[tracing::instrument(skip(pool))]
 pub async fn board(pool: SqlitePool, board_slug: String) -> Response {
-    match get_board(&pool, &board_slug).await {
+    match get_board(&pool, &board_slug, &templates::ThreadForm::default()).await {
         Ok(board_template) => warp::reply::html(board_template.into_string()).into_response(),
         Err(errors::BoardRouteError::NotFound(board_slug)) => {
             tracing::warn!("board not present or inactive in database");
@@ -76,6 +78,92 @@ pub async fn thread(pool: SqlitePool, board_slug: String, thread_id: i64) -> Res
 }
 
 #[tracing::instrument(skip(pool))]
+pub async fn new_thread(
+    pool: SqlitePool,
+    board_slug: String,
+    form: models::ThreadSubmission,
+) -> Response {
+    tracing::debug!(?board_slug, ?form, "got");
+    match validate_thread_fields(&board_slug, &form) {
+        Ok(thread) => match queries::make_thread(&pool, thread).await {
+            Ok(Some(thread_id)) => {
+                tracing::info!(?thread_id, "new thread made");
+                let location = format!("/{board_slug}/threads/{thread_id}");
+                warp::reply::with_header(StatusCode::SEE_OTHER, "location", location)
+                    .into_response()
+            }
+            Ok(None) => {
+                tracing::warn!("board not present or inactive in database");
+                board_not_found(&board_slug)
+            }
+            Err(error) => {
+                tracing::error!(?error, "failed to create thread");
+                internal_server_error_page()
+            }
+        },
+        Err(errors) => {
+            tracing::info!(?errors, "errors in new thread form");
+            let rendered_form = templates::ThreadForm {
+                title: &form.title,
+                screen_name: &form.screen_name,
+                body: &form.body,
+                errors: &errors,
+            };
+            match get_board(&pool, &board_slug, &rendered_form).await {
+                Ok(board_template) => warp::reply::with_status(
+                    warp::reply::html(board_template.into_string()),
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                )
+                .into_response(),
+                Err(errors::BoardRouteError::NotFound(board_slug)) => {
+                    tracing::warn!("board not found or inactive in database");
+                    board_not_found(&board_slug)
+                }
+                Err(errors::BoardRouteError::Db(error)) => {
+                    tracing::error!(?error, "query for board failed");
+                    internal_server_error_page()
+                }
+            }
+        }
+    }
+}
+
+#[tracing::instrument]
+fn validate_thread_fields(
+    board_slug: &str,
+    form: &models::ThreadSubmission,
+) -> Result<models::NewThread, Vec<templates::FieldError>> {
+    let mut errors = vec![];
+    if let Err(screen_name_error) = validate_screen_name(&form.screen_name) {
+        errors.push(screen_name_error);
+    }
+
+    if let Err(title_error) = validate_thread_title(&form.title) {
+        errors.push(title_error);
+    }
+
+    if let Err(post_error) = validate_post_body(&form.body) {
+        errors.push(post_error);
+    }
+
+    if errors.is_empty() {
+        let screen_name = if form.screen_name.trim().is_empty() {
+            None
+        } else {
+            Some(form.screen_name.trim().to_string())
+        };
+        Ok(models::NewThread {
+            board_slug: board_slug.to_string(),
+            title: form.title.trim().to_string(),
+            screen_name,
+            body: form.body.trim().to_string(),
+        })
+    } else {
+        Err(errors)
+    }
+}
+
+#[tracing::instrument(skip(pool))]
 pub async fn reply(
     pool: SqlitePool,
     board_slug: String,
@@ -85,7 +173,7 @@ pub async fn reply(
     // TODO: at some point it might be worth flattening this out via its own enum type encoding the
     // possible ways it can fail (PostReplyStatus::Ok(NewPost), BoardNotFound, ThreadNotFound,
     // DBError(sqlx::Error))
-    match validate_fields(thread_id, &form) {
+    match validate_reply_fields(thread_id, &form) {
         Ok(new_post) => {
             tracing::debug!(?new_post, "form submission valid, record to insert; ");
             match queries::insert_reply(&pool, &board_slug, new_post).await {
@@ -145,28 +233,21 @@ pub async fn reply(
     }
 }
 
-fn validate_fields(
+#[tracing::instrument]
+fn validate_reply_fields(
     thread_id: i64,
     form: &models::ReplySubmission,
 ) -> Result<models::NewPost, Vec<templates::FieldError>> {
     let mut errors = vec![];
-    if form.screen_name.trim().chars().count() > models::MAX_NAME_CHARS {
-        errors.push(templates::FieldError {
-            field: "screen_name",
-            message: SCREEN_NAME_TOO_LONG_ERROR.to_string(),
-        });
+
+    if let Err(screen_name_error) = validate_screen_name(&form.screen_name) {
+        errors.push(screen_name_error);
     }
-    if form.body.trim().chars().count() > models::MAX_BODY_CHARS {
-        errors.push(templates::FieldError {
-            field: "body",
-            message: REPLY_TOO_LONG_ERROR.to_string(),
-        });
-    } else if form.body.trim().is_empty() {
-        errors.push(templates::FieldError {
-            field: "body",
-            message: REPLY_EMPTY_ERROR.to_string(),
-        });
+
+    if let Err(post_error) = validate_post_body(&form.body) {
+        errors.push(post_error);
     }
+
     if errors.is_empty() {
         let screen_name = if form.screen_name.trim().is_empty() {
             None
@@ -183,9 +264,53 @@ fn validate_fields(
     }
 }
 
+fn validate_screen_name(screen_name: &str) -> Result<(), templates::FieldError> {
+    if screen_name.trim().chars().count() > models::MAX_NAME_CHARS {
+        Err(templates::FieldError {
+            field: "screen_name",
+            message: SCREEN_NAME_TOO_LONG_ERROR.to_string(),
+        })
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_post_body(post_body: &str) -> Result<(), templates::FieldError> {
+    if post_body.trim().chars().count() > models::MAX_BODY_CHARS {
+        Err(templates::FieldError {
+            field: "body",
+            message: POST_TOO_LONG_ERROR.to_string(),
+        })
+    } else if post_body.trim().is_empty() {
+        Err(templates::FieldError {
+            field: "body",
+            message: POST_EMPTY_ERROR.to_string(),
+        })
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_thread_title(thread_title: &str) -> Result<(), templates::FieldError> {
+    if thread_title.trim().chars().count() > models::MAX_TITLE_CHARS {
+        Err(templates::FieldError {
+            field: "title",
+            message: TITLE_TOO_LONG_ERROR.to_string(),
+        })
+    } else if thread_title.trim().is_empty() {
+        Err(templates::FieldError {
+            field: "title",
+            message: TITLE_EMPTY_ERROR.to_string(),
+        })
+    } else {
+        Ok(())
+    }
+}
+
 async fn get_board(
     pool: &SqlitePool,
     board_slug: &str,
+    thread_form: &templates::ThreadForm<'_>,
 ) -> Result<maud::Markup, errors::BoardRouteError> {
     let board = queries::board_by_slug(pool, board_slug)
         .await
@@ -196,11 +321,7 @@ async fn get_board(
     let threads = queries::threads_by_board(pool, board.id)
         .await
         .map_err(errors::BoardRouteError::Db)?;
-    Ok(templates::board_page(
-        &board,
-        &threads,
-        &templates::ThreadForm::default(),
-    ))
+    Ok(templates::board_page(&board, &threads, thread_form))
 }
 
 async fn get_thread(
