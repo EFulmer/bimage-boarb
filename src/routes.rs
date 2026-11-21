@@ -443,3 +443,152 @@ fn error_page_with_response(status: StatusCode, heading: &str, message: &str) ->
     )
     .into_response()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use models::{MAX_BODY_CHARS, MAX_NAME_CHARS, MAX_TITLE_CHARS};
+
+    /// Which fields failed, in the order the validator reported them.
+    fn failed_fields(errors: &[templates::FieldError]) -> Vec<&'static str> {
+        errors.iter().map(|e| e.field).collect()
+    }
+
+    fn reply(screen_name: &str, body: &str) -> models::ReplySubmission {
+        models::ReplySubmission {
+            screen_name: screen_name.to_string(),
+            body: body.to_string(),
+        }
+    }
+
+    fn thread(title: &str, screen_name: &str, body: &str) -> models::ThreadSubmission {
+        models::ThreadSubmission {
+            title: title.to_string(),
+            screen_name: screen_name.to_string(),
+            body: body.to_string(),
+        }
+    }
+
+    // --- single fields -------------------------------------------------------------------------
+
+    #[test]
+    fn screen_name_limit_is_inclusive() {
+        assert!(validate_screen_name(&"a".repeat(MAX_NAME_CHARS)).is_ok());
+        let err = validate_screen_name(&"a".repeat(MAX_NAME_CHARS + 1)).unwrap_err();
+        assert_eq!(err.field, "screen_name");
+        assert_eq!(err.message, SCREEN_NAME_TOO_LONG_ERROR);
+    }
+
+    #[test]
+    fn screen_name_may_be_blank() {
+        assert!(validate_screen_name("").is_ok());
+        assert!(validate_screen_name("   ").is_ok());
+    }
+
+    #[test]
+    fn limits_count_chars_not_bytes() {
+        // "é" is 2 bytes and "🐸" is 4, so these would fail a `.len()` check.
+        assert!(validate_screen_name(&"é".repeat(MAX_NAME_CHARS)).is_ok());
+        assert!(validate_thread_title(&"🐸".repeat(MAX_TITLE_CHARS)).is_ok());
+        assert!(validate_post_body(&"🐸".repeat(MAX_BODY_CHARS)).is_ok());
+        assert!(validate_thread_title(&"🐸".repeat(MAX_TITLE_CHARS + 1)).is_err());
+    }
+
+    #[test]
+    fn limits_ignore_surrounding_whitespace() {
+        let padded = format!("  {}\n", "a".repeat(MAX_NAME_CHARS));
+        assert!(validate_screen_name(&padded).is_ok());
+        let padded = format!("\t{}  ", "a".repeat(MAX_TITLE_CHARS));
+        assert!(validate_thread_title(&padded).is_ok());
+    }
+
+    #[test]
+    fn body_limit_is_inclusive() {
+        assert!(validate_post_body(&"a".repeat(MAX_BODY_CHARS)).is_ok());
+        let err = validate_post_body(&"a".repeat(MAX_BODY_CHARS + 1)).unwrap_err();
+        assert_eq!(err.field, "body");
+        assert_eq!(err.message, POST_TOO_LONG_ERROR);
+    }
+
+    #[test]
+    fn blank_body_is_empty_not_too_long() {
+        for body in ["", "   ", "\n\t\n", &" ".repeat(MAX_BODY_CHARS + 1)] {
+            let err = validate_post_body(body).unwrap_err();
+            assert_eq!(err.message, POST_EMPTY_ERROR, "body {body:?}");
+        }
+    }
+
+    #[test]
+    fn title_limit_is_inclusive() {
+        assert!(validate_thread_title(&"a".repeat(MAX_TITLE_CHARS)).is_ok());
+        let err = validate_thread_title(&"a".repeat(MAX_TITLE_CHARS + 1)).unwrap_err();
+        assert_eq!(err.field, "title");
+        assert_eq!(err.message, TITLE_TOO_LONG_ERROR);
+    }
+
+    #[test]
+    fn blank_title_is_empty() {
+        for title in ["", "   ", "\n"] {
+            let err = validate_thread_title(title).unwrap_err();
+            assert_eq!(err.message, TITLE_EMPTY_ERROR, "title {title:?}");
+        }
+    }
+
+    // --- whole replies -------------------------------------------------------------------------
+
+    #[test]
+    fn valid_reply_is_trimmed() {
+        let post = validate_reply_fields(7, &reply("  anon  ", "\n  hello\n  world \n")).unwrap();
+        assert_eq!(post.thread_id, 7);
+        assert_eq!(post.screen_name.as_deref(), Some("anon"));
+        // Only the ends are trimmed; inner whitespace and newlines are kept.
+        assert_eq!(post.body, "hello\n  world");
+    }
+
+    #[test]
+    fn blank_reply_name_becomes_none() {
+        for name in ["", "   "] {
+            let post = validate_reply_fields(1, &reply(name, "hi")).unwrap();
+            assert_eq!(post.screen_name, None, "name {name:?}");
+        }
+    }
+
+    #[test]
+    fn reply_reports_every_bad_field() {
+        let errors =
+            validate_reply_fields(1, &reply(&"a".repeat(MAX_NAME_CHARS + 1), " ")).unwrap_err();
+        assert_eq!(failed_fields(&errors), ["screen_name", "body"]);
+    }
+
+    // --- whole threads -------------------------------------------------------------------------
+
+    #[test]
+    fn valid_thread_is_trimmed() {
+        let new =
+            validate_thread_fields("main", &thread(" Hi there ", " anon ", " first! ")).unwrap();
+        assert_eq!(new.board_slug, "main");
+        assert_eq!(new.title, "Hi there");
+        assert_eq!(new.screen_name.as_deref(), Some("anon"));
+        assert_eq!(new.body, "first!");
+    }
+
+    #[test]
+    fn blank_thread_name_becomes_none() {
+        let new = validate_thread_fields("main", &thread("t", "  ", "b")).unwrap();
+        assert_eq!(new.screen_name, None);
+    }
+
+    #[test]
+    fn thread_reports_every_bad_field() {
+        let errors =
+            validate_thread_fields("main", &thread("", &"a".repeat(MAX_NAME_CHARS + 1), ""))
+                .unwrap_err();
+        assert_eq!(failed_fields(&errors), ["screen_name", "title", "body"]);
+    }
+
+    #[test]
+    fn thread_with_only_a_bad_title_reports_only_title() {
+        let errors = validate_thread_fields("main", &thread("   ", "anon", "body")).unwrap_err();
+        assert_eq!(failed_fields(&errors), ["title"]);
+    }
+}
