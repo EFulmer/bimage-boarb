@@ -1,12 +1,7 @@
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use warp::Filter;
 
-mod db;
-mod errors;
-mod models;
-mod queries;
-mod routes;
-mod templates;
+use bimage_boarb::{db, routes};
 
 #[tokio::main]
 async fn main() {
