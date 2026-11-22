@@ -1,5 +1,3 @@
-use std::env;
-
 use serde::Deserialize;
 
 use bimage_boarb::db;
@@ -33,7 +31,7 @@ struct PostRow {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let db_name = env::var("DB_NAME").unwrap_or("bimage.db".to_string());
+    let db_name = db::get_default_db_name();
     let pool = db::make_pool(db_name).await;
     let mut reader = csv::Reader::from_path("data/boards.csv")?;
 

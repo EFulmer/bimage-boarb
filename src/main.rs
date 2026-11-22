@@ -1,4 +1,3 @@
-use std::env;
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 
 use bimage_boarb::db;
@@ -12,7 +11,7 @@ async fn main() {
                 .from_env_lossy(),
         )
         .init();
-    let db_name = env::var("DB_NAME").unwrap_or("bimage.db".to_string());
+    let db_name = db::get_default_db_name();
     let pool = db::make_pool(db_name).await;
 
     sqlx::migrate!()
