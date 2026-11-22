@@ -1,6 +1,8 @@
 .PHONY: fmt build run create_schema tools create-db migrate-db seed-db lint
 export RUST_LOG ?= bimage_boarb=debug,info
 export DB_NAME ?= bimage.db
+# DATABASE_URL is used by `sqlx` commands; `DB_NAME` is used by my code.
+export DATABASE_URL ?= sqlite:${DB_NAME}?mode=rwc
 
 # Dev installation:
 tools:
@@ -29,5 +31,5 @@ create-db:
 migrate-db:
 	sqlx migrate run
 
-seed-db:
+seed-db: migrate-db
 	cargo run --bin seed
