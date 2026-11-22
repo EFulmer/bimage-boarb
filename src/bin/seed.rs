@@ -1,5 +1,8 @@
+use std::env;
+
 use serde::Deserialize;
-use sqlx::sqlite::SqlitePoolOptions;
+
+use bimage_boarb::db;
 
 #[derive(Deserialize)]
 struct BoardRow {
@@ -30,8 +33,8 @@ struct PostRow {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // TODO: parametrize
-    let pool = SqlitePoolOptions::new().connect("sqlite:bimage.db").await?;
+    let db_name = env::var("DB_NAME").unwrap_or("bimage.db".to_string());
+    let pool = db::make_pool(db_name).await;
     let mut reader = csv::Reader::from_path("data/boards.csv")?;
 
     for row in reader.deserialize::<BoardRow>() {

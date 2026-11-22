@@ -4,10 +4,10 @@ use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 use sqlx::{Pool, Sqlite};
 use warp::Filter;
 
-// TODO: parametrize this function
-pub async fn make_pool() -> Pool<Sqlite> {
+pub async fn make_pool(db_name: String) -> Pool<Sqlite> {
+    let connection_string = format!("sqlite:{db_name}?mode=rwc");
     SqlitePoolOptions::new()
-        .connect("sqlite:bimage.db?mode=rwc")
+        .connect(&connection_string)
         .await
         .expect("failed to open database")
 }
