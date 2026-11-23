@@ -10,6 +10,7 @@ use warp::{
     reply::Response,
 };
 
+use crate::errors::{Object, QueryError};
 use crate::{errors, models, queries, templates};
 
 const SCREEN_NAME_TOO_LONG_ERROR: &str = "Your screen name is too long.";
@@ -40,11 +41,11 @@ pub async fn boards(pool: SqlitePool) -> Response {
 pub async fn board(pool: SqlitePool, board_slug: String) -> Response {
     match get_board(&pool, &board_slug, &templates::ThreadForm::default()).await {
         Ok(board_template) => warp::reply::html(board_template.into_string()).into_response(),
-        Err(errors::BoardRouteError::NotFound(board_slug)) => {
+        Err(errors::GetBoardError::NotFound(board_slug)) => {
             tracing::warn!("board not present or inactive in database");
             board_not_found(&board_slug)
         }
-        Err(errors::BoardRouteError::Db(error)) => {
+        Err(errors::GetBoardError::Db(error)) => {
             tracing::error!(?error, "query for board failed");
             internal_server_error_page()
         }
@@ -62,15 +63,15 @@ pub async fn thread(pool: SqlitePool, board_slug: String, thread_id: i64) -> Res
     .await
     {
         Ok(thread_template) => warp::reply::html(thread_template.into_string()).into_response(),
-        Err(errors::ThreadRouteError::BoardNotFound(board_slug)) => {
+        Err(errors::GetThreadError::BoardNotFound(board_slug)) => {
             tracing::warn!("board not present or inactive in database");
             board_not_found(&board_slug)
         }
-        Err(errors::ThreadRouteError::ThreadNotFound(thread_id)) => {
+        Err(errors::GetThreadError::ThreadNotFound(thread_id)) => {
             tracing::warn!("thread not present or inactive in database");
             thread_not_found(thread_id)
         }
-        Err(errors::ThreadRouteError::Db(error)) => {
+        Err(errors::GetThreadError::Db(error)) => {
             tracing::error!(?error, "query for thread or board failed");
             internal_server_error_page()
         }
@@ -86,17 +87,18 @@ pub async fn new_thread(
     tracing::debug!(?board_slug, ?form, "got");
     match validate_thread_fields(&board_slug, &form) {
         Ok(thread) => match queries::make_thread(&pool, thread).await {
-            Ok(Some(thread_id)) => {
+            Ok(thread_id) => {
                 tracing::info!(?thread_id, "new thread made");
                 let location = format!("/{board_slug}/threads/{thread_id}");
                 warp::reply::with_header(StatusCode::SEE_OTHER, "location", location)
                     .into_response()
             }
-            Ok(None) => {
-                tracing::warn!("board not present or inactive in database");
+            Err(QueryError::NotFound(_)) => {
+                // make_thread can only return a NotFound on the board
+                tracing::warn!("board not found or inactive in database");
                 board_not_found(&board_slug)
             }
-            Err(error) => {
+            Err(QueryError::Db(error)) => {
                 tracing::error!(?error, "failed to create thread");
                 internal_server_error_page()
             }
@@ -115,11 +117,11 @@ pub async fn new_thread(
                     StatusCode::UNPROCESSABLE_ENTITY,
                 )
                 .into_response(),
-                Err(errors::BoardRouteError::NotFound(board_slug)) => {
+                Err(errors::GetBoardError::NotFound(board_slug)) => {
                     tracing::warn!("board not found or inactive in database");
                     board_not_found(&board_slug)
                 }
-                Err(errors::BoardRouteError::Db(error)) => {
+                Err(errors::GetBoardError::Db(error)) => {
                     tracing::error!(?error, "query for board failed");
                     internal_server_error_page()
                 }
@@ -177,7 +179,7 @@ pub async fn reply(
         Ok(new_post) => {
             tracing::debug!(?new_post, "form submission valid, record to insert; ");
             match queries::insert_reply(&pool, &board_slug, new_post).await {
-                Ok(Some(post_id)) => {
+                Ok(post_id) => {
                     let location = format!("/{board_slug}/threads/{thread_id}#p{post_id}");
                     tracing::debug!(
                         ?post_id,
@@ -192,11 +194,15 @@ pub async fn reply(
                     )
                     .into_response()
                 }
-                Ok(None) => {
-                    tracing::warn!("thread not present or inactive in database");
+                Err(QueryError::NotFound(Object::Thread(thread_id))) => {
+                    tracing::warn!(?thread_id, "thread not present or inactive in database");
                     thread_not_found(thread_id)
                 }
-                Err(error) => {
+                Err(QueryError::NotFound(Object::Board(board_slug))) => {
+                    tracing::warn!(?board_slug, "board not present or inactive in database");
+                    board_not_found(&board_slug)
+                }
+                Err(QueryError::Db(error)) => {
                     tracing::error!(?error, "failed to insert reply");
                     internal_server_error_page()
                 }
@@ -216,15 +222,15 @@ pub async fn reply(
                     StatusCode::UNPROCESSABLE_ENTITY,
                 )
                 .into_response(),
-                Err(errors::ThreadRouteError::BoardNotFound(board_slug)) => {
+                Err(errors::GetThreadError::BoardNotFound(board_slug)) => {
                     tracing::warn!("board not present or inactive in database");
                     board_not_found(&board_slug)
                 }
-                Err(errors::ThreadRouteError::ThreadNotFound(thread_id)) => {
+                Err(errors::GetThreadError::ThreadNotFound(thread_id)) => {
                     tracing::warn!("thread not present or inactive in database");
                     thread_not_found(thread_id)
                 }
-                Err(errors::ThreadRouteError::Db(error)) => {
+                Err(errors::GetThreadError::Db(error)) => {
                     tracing::error!(?error, "query for thread or board failed");
                     internal_server_error_page()
                 }
@@ -311,16 +317,16 @@ async fn get_board(
     pool: &SqlitePool,
     board_slug: &str,
     thread_form: &templates::ThreadForm<'_>,
-) -> Result<maud::Markup, errors::BoardRouteError> {
+) -> Result<maud::Markup, errors::GetBoardError> {
     let board = queries::board_by_slug(pool, board_slug)
         .await
         .map_err(|e| match e {
-            Error::RowNotFound => errors::BoardRouteError::NotFound(board_slug.to_string()),
-            e => errors::BoardRouteError::Db(e),
+            Error::RowNotFound => errors::GetBoardError::NotFound(board_slug.to_string()),
+            e => errors::GetBoardError::Db(e),
         })?;
     let threads = queries::threads_by_board(pool, board.id)
         .await
-        .map_err(errors::BoardRouteError::Db)?;
+        .map_err(errors::GetBoardError::Db)?;
     Ok(templates::board_page(&board, &threads, thread_form))
 }
 
@@ -329,22 +335,22 @@ async fn get_thread(
     board_slug: &str,
     thread_id: i64,
     reply_form: &templates::ReplyForm<'_>,
-) -> Result<maud::Markup, errors::ThreadRouteError> {
+) -> Result<maud::Markup, errors::GetThreadError> {
     let board = queries::board_by_slug(pool, board_slug)
         .await
         .map_err(|e| match e {
-            Error::RowNotFound => errors::ThreadRouteError::BoardNotFound(board_slug.to_string()),
-            e => errors::ThreadRouteError::Db(e),
+            Error::RowNotFound => errors::GetThreadError::BoardNotFound(board_slug.to_string()),
+            e => errors::GetThreadError::Db(e),
         })?;
     let thread = queries::thread_by_id(pool, board.id, thread_id)
         .await
         .map_err(|e| match e {
-            Error::RowNotFound => errors::ThreadRouteError::ThreadNotFound(thread_id),
-            e => errors::ThreadRouteError::Db(e),
+            Error::RowNotFound => errors::GetThreadError::ThreadNotFound(thread_id),
+            e => errors::GetThreadError::Db(e),
         })?;
     let posts = queries::posts_by_thread(pool, thread.id)
         .await
-        .map_err(errors::ThreadRouteError::Db)?;
+        .map_err(errors::GetThreadError::Db)?;
     Ok(templates::thread_page(&board, &thread, &posts, reply_form))
 }
 
