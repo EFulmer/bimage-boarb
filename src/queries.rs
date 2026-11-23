@@ -1,5 +1,6 @@
 use sqlx::sqlite::SqlitePool;
 
+use crate::errors::{Object, QueryError};
 use crate::models;
 
 pub async fn all_boards(pool: &SqlitePool) -> Result<Vec<models::Board>, sqlx::Error> {
@@ -69,11 +70,12 @@ pub async fn posts_by_thread(
     .await
 }
 
-// TODO: use more descriptive error type rather than Ok(None)
+/// Return the database's ID on successful creation of the thread, else a descriptive error; board
+/// not found or internal DB error.
 pub async fn make_thread(
     pool: &SqlitePool,
     new_thread: models::NewThread,
-) -> Result<Option<i64>, sqlx::Error> {
+) -> Result<i64, QueryError> {
     let mut tx = pool.begin().await?;
     // This requires two inserts; one for the thread and one for its OP.
     let Some(new_thread_id) = sqlx::query_scalar(
@@ -81,32 +83,33 @@ pub async fn make_thread(
         select id, ? from boards where slug = ? and active = 1 \
         returning id",
     )
-    .bind(new_thread.title)
-    .bind(new_thread.board_slug)
+    .bind(&new_thread.title)
+    .bind(&new_thread.board_slug)
     .fetch_optional(&mut *tx)
     .await?
     else {
-        return Ok(None);
+        return Err(QueryError::NotFound(Object::Board(new_thread.board_slug)));
     };
     sqlx::query(
         "insert into posts (thread_id, screen_name, body) \
         values (?, ?, ?)",
     )
     .bind(new_thread_id)
-    .bind(new_thread.screen_name)
-    .bind(new_thread.body)
+    .bind(&new_thread.screen_name)
+    .bind(&new_thread.body)
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    Ok(Some(new_thread_id))
+    Ok(new_thread_id)
 }
 
-// TODO: use more descriptive error type rather than Ok(None)
+/// Return the new reply's ID on successful creation, else a descriptive error; parent thread not
+/// found or internal DB error.
 pub async fn insert_reply(
     pool: &SqlitePool,
     board_slug: &str,
     new_post: models::NewPost,
-) -> Result<Option<i64>, sqlx::Error> {
+) -> Result<i64, QueryError> {
     let mut tx = pool.begin().await?;
 
     let bumped = sqlx::query(
@@ -120,8 +123,17 @@ pub async fn insert_reply(
     .await?
     .rows_affected();
 
+    // If there was no thread to bump (we don't have sageing), then we need to check whether the
+    // board exists at all.
     if bumped == 0 {
-        return Ok(None);
+        tx.rollback().await?;
+        return match board_by_slug(pool, board_slug).await {
+            Ok(_) => Err(QueryError::NotFound(Object::Thread(new_post.thread_id))),
+            Err(sqlx::Error::RowNotFound) => {
+                Err(QueryError::NotFound(Object::Board(board_slug.to_owned())))
+            }
+            Err(e) => Err(QueryError::Db(e)),
+        };
     }
 
     let new_post_id = sqlx::query_scalar(
@@ -135,5 +147,5 @@ pub async fn insert_reply(
     .await?;
 
     tx.commit().await?;
-    Ok(Some(new_post_id))
+    Ok(new_post_id)
 }
